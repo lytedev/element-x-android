@@ -11,6 +11,7 @@ package io.element.android.libraries.matrix.test.roomlist
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.roomlist.DynamicRoomList
 import io.element.android.libraries.matrix.api.roomlist.RoomList
+import io.element.android.libraries.matrix.api.roomlist.RoomListFilter
 import io.element.android.libraries.matrix.api.roomlist.RoomListService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,9 @@ import kotlinx.coroutines.flow.StateFlow
 class FakeRoomListService(
     private val subscribeToVisibleRoomsLambda: (List<RoomId>) -> Unit = {},
     private val createRoomListLambda: (pageSize: Int) -> DynamicRoomList = { pageSize -> FakeDynamicRoomList(pageSize = pageSize) },
+    private val createRoomListWithInitialFilterLambda: (pageSize: Int, initialFilter: RoomListFilter) -> DynamicRoomList = { pageSize, _ ->
+        createRoomListLambda(pageSize)
+    },
     override val allRooms: RoomList = createRoomListLambda(Int.MAX_VALUE),
     private val isInitialSyncLambda: () -> Boolean = { true },
 ) : RoomListService {
@@ -40,7 +44,8 @@ class FakeRoomListService(
         pageSize: Int,
         source: RoomList.Source,
         coroutineScope: CoroutineScope,
-    ) = createRoomListLambda(pageSize)
+        initialFilter: RoomListFilter,
+    ) = createRoomListWithInitialFilterLambda(pageSize, initialFilter)
 
     override suspend fun subscribeToVisibleRooms(roomIds: List<RoomId>) {
         subscribeToVisibleRoomsLambda(roomIds)

@@ -159,6 +159,13 @@ interface BaseRoom : Closeable {
     suspend fun setIsFavorite(isFavorite: Boolean): Result<Unit>
 
     /**
+     * Sets the room as low priority or not, based on the [isLowPriority] parameter.
+     *
+     * @param isLowPriority true to mark the room as low priority, false to remove the flag.
+     */
+    suspend fun setIsLowPriority(isLowPriority: Boolean): Result<Unit>
+
+    /**
      * Mark the room as read by trying to attach an unthreaded read receipt to the latest room event.
      *
      * Note this will instantiate a new timeline, which is an expensive operation.

@@ -17,7 +17,10 @@ import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.Favourite
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.Identifiers
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.Invite
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.Joined
+import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.LowPriority
+import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonFavorite
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonLeft
+import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonLowPriority
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonSpace
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.None
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NormalizedMatchRoomName
@@ -69,6 +72,9 @@ internal object RoomListFilterMapper {
             RoomListFilter.Category.People -> Category(RoomListFilterCategory.PEOPLE)
             RoomListFilter.Category.Space -> Space
             RoomListFilter.Favorite -> Favourite
+            RoomListFilter.NonFavorite -> NonFavorite
+            RoomListFilter.LowPriority -> LowPriority
+            RoomListFilter.NonLowPriority -> NonLowPriority
             RoomListFilter.Unread -> ReadReceipts(RoomListFilterReadReceipts.NOTIFICATIONS)
             RoomListFilter.Mentions -> ReadReceipts(RoomListFilterReadReceipts.MENTIONS)
             is RoomListFilter.NormalizedMatchRoomName -> NormalizedMatchRoomName(

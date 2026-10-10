@@ -63,6 +63,21 @@ sealed interface RoomListFilter {
     data object Favorite : RoomListFilter
 
     /**
+     * A filter that matches rooms that are not marked as favorite.
+     */
+    data object NonFavorite : RoomListFilter
+
+    /**
+     * A filter that matches rooms that are marked as low priority.
+     */
+    data object LowPriority : RoomListFilter
+
+    /**
+     * A filter that matches rooms that are not marked as low priority.
+     */
+    data object NonLowPriority : RoomListFilter
+
+    /**
      * A filter that matches rooms with Invited membership.
      */
     data object Invite : RoomListFilter

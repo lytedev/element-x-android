@@ -45,11 +45,13 @@ interface RoomListService {
      * @param pageSize the number of rooms to load at once.
      * @param source the source of the rooms, either all rooms or invites.
      * @param coroutineScope the coroutine scope to use for the room list operations.
+     * @param initialFilter the filter applied from the very first emitted rooms, so that rooms outside of it are never emitted.
      */
     fun createRoomList(
         pageSize: Int,
         source: RoomList.Source,
         coroutineScope: CoroutineScope,
+        initialFilter: RoomListFilter = RoomListFilter.all(),
     ): DynamicRoomList
 
     /**
