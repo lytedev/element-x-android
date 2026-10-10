@@ -25,6 +25,8 @@ import io.element.android.libraries.matrix.api.room.RoomMembershipObserver
 import io.element.android.libraries.matrix.api.room.draft.ComposerDraft
 import io.element.android.libraries.matrix.api.room.powerlevels.RoomPermissions
 import io.element.android.libraries.matrix.api.room.powerlevels.RoomPowerLevelsValues
+import io.element.android.libraries.matrix.api.room.tags.RoomTagInfo
+import io.element.android.libraries.matrix.api.room.tags.RoomTagName
 import io.element.android.libraries.matrix.api.room.tombstone.PredecessorRoom
 import io.element.android.libraries.matrix.api.roomdirectory.RoomVisibility
 import io.element.android.libraries.matrix.api.timeline.ReceiptType
@@ -33,6 +35,7 @@ import io.element.android.libraries.matrix.impl.room.member.RoomMemberListFetche
 import io.element.android.libraries.matrix.impl.room.member.RoomMemberMapper
 import io.element.android.libraries.matrix.impl.room.powerlevels.RoomPowerLevelsValuesMapper
 import io.element.android.libraries.matrix.impl.room.powerlevels.RustRoomPermissions
+import io.element.android.libraries.matrix.impl.room.tags.toRoomTags
 import io.element.android.libraries.matrix.impl.room.tombstone.map
 import io.element.android.libraries.matrix.impl.roomdirectory.map
 import io.element.android.libraries.matrix.impl.timeline.toRustReceiptType
@@ -50,6 +53,7 @@ import org.matrix.rustcomponents.sdk.use
 import timber.log.Timber
 import uniffi.matrix_sdk_base.EncryptionState
 import org.matrix.rustcomponents.sdk.Room as InnerRoom
+import org.matrix.rustcomponents.sdk.TagInfo as RustTagInfo
 
 class RustBaseRoom(
     override val sessionId: SessionId,
@@ -209,6 +213,24 @@ class RustBaseRoom(
     override suspend fun setIsLowPriority(isLowPriority: Boolean): Result<Unit> = withContext(roomDispatcher) {
         runCatchingExceptions {
             innerRoom.setIsLowPriority(isLowPriority, null)
+        }
+    }
+
+    override suspend fun tags(): Result<Map<RoomTagName, RoomTagInfo>> = withContext(roomDispatcher) {
+        runCatchingExceptions {
+            innerRoom.tags().toRoomTags()
+        }
+    }
+
+    override suspend fun setTag(tag: RoomTagName, tagInfo: RoomTagInfo): Result<Unit> = withContext(roomDispatcher) {
+        runCatchingExceptions {
+            innerRoom.setTag(tag.value, RustTagInfo(order = tagInfo.orderAmongRoomsWithThisTag))
+        }
+    }
+
+    override suspend fun removeTag(tag: RoomTagName): Result<Unit> = withContext(roomDispatcher) {
+        runCatchingExceptions {
+            innerRoom.removeTag(tag.value)
         }
     }
 

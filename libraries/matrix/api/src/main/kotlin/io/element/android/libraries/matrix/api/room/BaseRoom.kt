@@ -16,6 +16,8 @@ import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.room.draft.ComposerDraft
 import io.element.android.libraries.matrix.api.room.powerlevels.RoomPermissions
 import io.element.android.libraries.matrix.api.room.powerlevels.RoomPowerLevelsValues
+import io.element.android.libraries.matrix.api.room.tags.RoomTagInfo
+import io.element.android.libraries.matrix.api.room.tags.RoomTagName
 import io.element.android.libraries.matrix.api.room.tombstone.PredecessorRoom
 import io.element.android.libraries.matrix.api.roomdirectory.RoomVisibility
 import io.element.android.libraries.matrix.api.timeline.ReceiptType
@@ -164,6 +166,21 @@ interface BaseRoom : Closeable {
      * @param isLowPriority true to mark the room as low priority, false to remove the flag.
      */
     suspend fun setIsLowPriority(isLowPriority: Boolean): Result<Unit>
+
+    /**
+     * Every tag of the room, keyed by raw tag name, including tags outside of the `m.*` and `u.*` namespaces.
+     */
+    suspend fun tags(): Result<Map<RoomTagName, RoomTagInfo>>
+
+    /**
+     * Adds [tag] to the room, or updates its info if the room already has it.
+     */
+    suspend fun setTag(tag: RoomTagName, tagInfo: RoomTagInfo = RoomTagInfo()): Result<Unit>
+
+    /**
+     * Removes [tag] from the room.
+     */
+    suspend fun removeTag(tag: RoomTagName): Result<Unit>
 
     /**
      * Mark the room as read by trying to attach an unthreaded read receipt to the latest room event.

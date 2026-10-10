@@ -49,6 +49,7 @@ import io.element.android.libraries.matrix.api.room.RoomMembershipObserver
 import io.element.android.libraries.matrix.api.room.alias.ResolvedRoomAlias
 import io.element.android.libraries.matrix.api.room.history.RoomHistoryVisibility
 import io.element.android.libraries.matrix.api.room.join.JoinRule
+import io.element.android.libraries.matrix.api.room.tags.RoomTagsChange
 import io.element.android.libraries.matrix.api.roomdirectory.RoomVisibility
 import io.element.android.libraries.matrix.api.roomlist.RoomListService
 import io.element.android.libraries.matrix.api.scanner.ContentScanner
@@ -81,6 +82,7 @@ import io.element.android.libraries.matrix.impl.room.history.map
 import io.element.android.libraries.matrix.impl.room.join.map
 import io.element.android.libraries.matrix.impl.room.location.map
 import io.element.android.libraries.matrix.impl.room.preview.RoomPreviewInfoMapper
+import io.element.android.libraries.matrix.impl.room.tags.toRoomTags
 import io.element.android.libraries.matrix.impl.roomdirectory.RustRoomDirectoryService
 import io.element.android.libraries.matrix.impl.roomdirectory.map
 import io.element.android.libraries.matrix.impl.roomlist.RoomListFactory
@@ -122,6 +124,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -138,8 +141,11 @@ import org.matrix.rustcomponents.sdk.Membership
 import org.matrix.rustcomponents.sdk.NotificationProcessSetup
 import org.matrix.rustcomponents.sdk.PowerLevels
 import org.matrix.rustcomponents.sdk.ProfileListener
+import org.matrix.rustcomponents.sdk.RawAccountDataListener
 import org.matrix.rustcomponents.sdk.RoomInfoListener
+import org.matrix.rustcomponents.sdk.RoomTagsListener
 import org.matrix.rustcomponents.sdk.SendQueueRoomErrorListener
+import org.matrix.rustcomponents.sdk.TagInfo
 import org.matrix.rustcomponents.sdk.TaskHandle
 import org.matrix.rustcomponents.sdk.UserProfile
 import org.matrix.rustcomponents.sdk.use
@@ -926,6 +932,27 @@ class RustMatrixClient(
             innerClient.setAccountData(eventType, content)
         }
     }
+
+    override fun accountDataChangesFlow(eventType: String): Flow<String> = mxCallbackFlow {
+        innerClient.observeRawAccountData(
+            eventType,
+            object : RawAccountDataListener {
+                override fun onChange(content: String) {
+                    channel.trySend(content)
+                }
+            }
+        )
+    }.buffer(Channel.UNLIMITED)
+
+    override val roomTagsChangesFlow: Flow<RoomTagsChange> = mxCallbackFlow {
+        innerClient.observeRoomTags(object : RoomTagsListener {
+            override fun onChange(roomId: String, tags: Map<String, TagInfo>) {
+                channel.trySend(RoomTagsChange(roomId = RoomId(roomId), tags = tags.toRoomTags()))
+            }
+        })
+    }
+        .buffer(Channel.UNLIMITED)
+        .shareIn(sessionCoroutineScope, started = SharingStarted.WhileSubscribed())
 
     override suspend fun canLinkNewDevice(): Result<Boolean> = withContext(sessionDispatcher) {
         runCatchingExceptions {

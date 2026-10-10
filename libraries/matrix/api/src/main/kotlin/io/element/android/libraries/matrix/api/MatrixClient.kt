@@ -36,6 +36,7 @@ import io.element.android.libraries.matrix.api.room.RoomInfo
 import io.element.android.libraries.matrix.api.room.RoomMembershipObserver
 import io.element.android.libraries.matrix.api.room.alias.ResolvedRoomAlias
 import io.element.android.libraries.matrix.api.room.location.BeaconInfoUpdate
+import io.element.android.libraries.matrix.api.room.tags.RoomTagsChange
 import io.element.android.libraries.matrix.api.roomdirectory.RoomDirectoryService
 import io.element.android.libraries.matrix.api.roomlist.RoomListService
 import io.element.android.libraries.matrix.api.scanner.ContentScanner
@@ -459,6 +460,20 @@ interface MatrixClient : ClientUrlContentFetcher {
      * @param content the new content, as a raw JSON object.
      */
     suspend fun setAccountData(eventType: String, content: String): Result<Unit>
+
+    /**
+     * Emits the raw JSON content of the global account data event of type [eventType] each time a sync changes it.
+     * The current content is not emitted; read it with [getAccountData].
+     *
+     * @param eventType the Matrix event type of the account data to follow, including types the SDK does not model.
+     */
+    fun accountDataChangesFlow(eventType: String): Flow<String>
+
+    /**
+     * Emits every tag of a room, keyed by raw tag name, each time a sync changes the tags of that room, for every room.
+     * The current tags are not emitted; read them with [io.element.android.libraries.matrix.api.room.BaseRoom.tags].
+     */
+    val roomTagsChangesFlow: Flow<RoomTagsChange>
 
     /**
      * Marks the room with the provided [roomId] as read, sending a fully read receipt for [eventId].

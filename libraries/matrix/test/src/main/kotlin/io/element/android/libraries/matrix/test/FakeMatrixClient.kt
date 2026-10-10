@@ -36,6 +36,7 @@ import io.element.android.libraries.matrix.api.room.RoomInfo
 import io.element.android.libraries.matrix.api.room.RoomMembershipObserver
 import io.element.android.libraries.matrix.api.room.alias.ResolvedRoomAlias
 import io.element.android.libraries.matrix.api.room.location.BeaconInfoUpdate
+import io.element.android.libraries.matrix.api.room.tags.RoomTagsChange
 import io.element.android.libraries.matrix.api.roomdirectory.RoomDirectoryService
 import io.element.android.libraries.matrix.api.roomlist.RoomListService
 import io.element.android.libraries.matrix.api.scanner.ContentScanner
@@ -124,6 +125,8 @@ class FakeMatrixClient(
     private val isLivekitRtcSupportedLambda: () -> Boolean = { false },
     override val ignoredUsersFlow: StateFlow<ImmutableList<UserId>> = MutableStateFlow(persistentListOf()),
     override val ownBeaconInfoUpdates: Flow<BeaconInfoUpdate> = emptyFlow(),
+    override val roomTagsChangesFlow: Flow<RoomTagsChange> = emptyFlow(),
+    private val accountDataChangesFlowLambda: (String) -> Flow<String> = { emptyFlow() },
     private val getMaxUploadSizeResult: () -> Result<Long> = { lambdaError() },
     private val getJoinedRoomIdsResult: () -> Result<Set<RoomId>> = { Result.success(emptySet()) },
     private val getRecentEmojisLambda: () -> Result<List<String>> = { Result.success(emptyList()) },
@@ -436,6 +439,8 @@ class FakeMatrixClient(
     override suspend fun setAccountData(eventType: String, content: String): Result<Unit> {
         return setAccountDataLambda(eventType, content)
     }
+
+    override fun accountDataChangesFlow(eventType: String): Flow<String> = accountDataChangesFlowLambda(eventType)
 
     override suspend fun markRoomAsFullyRead(roomId: RoomId, eventId: EventId): Result<Unit> {
         return markRoomAsFullyReadResult(roomId, eventId)

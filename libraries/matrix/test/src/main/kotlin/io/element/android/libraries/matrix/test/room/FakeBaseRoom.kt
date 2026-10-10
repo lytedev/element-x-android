@@ -21,6 +21,8 @@ import io.element.android.libraries.matrix.api.room.RoomMembersState
 import io.element.android.libraries.matrix.api.room.draft.ComposerDraft
 import io.element.android.libraries.matrix.api.room.powerlevels.RoomPermissions
 import io.element.android.libraries.matrix.api.room.powerlevels.RoomPowerLevelsValues
+import io.element.android.libraries.matrix.api.room.tags.RoomTagInfo
+import io.element.android.libraries.matrix.api.room.tags.RoomTagName
 import io.element.android.libraries.matrix.api.room.tombstone.PredecessorRoom
 import io.element.android.libraries.matrix.api.roomdirectory.RoomVisibility
 import io.element.android.libraries.matrix.api.timeline.ReceiptType
@@ -51,6 +53,9 @@ class FakeBaseRoom(
     private val joinRoomResult: () -> Result<Unit> = { lambdaError() },
     private val setIsFavoriteResult: (Boolean) -> Result<Unit> = { lambdaError() },
     private val setIsLowPriorityResult: (Boolean) -> Result<Unit> = { lambdaError() },
+    private val tagsResult: () -> Result<Map<RoomTagName, RoomTagInfo>> = { Result.success(emptyMap()) },
+    private val setTagResult: (RoomTagName, RoomTagInfo) -> Result<Unit> = { _, _ -> lambdaError() },
+    private val removeTagResult: (RoomTagName) -> Result<Unit> = { lambdaError() },
     private val markAsReadResult: (ReceiptType) -> Result<Unit> = { Result.success(Unit) },
     private val powerLevelsResult: () -> Result<RoomPowerLevelsValues> = { lambdaError() },
     private val leaveRoomLambda: () -> Result<Unit> = { lambdaError() },
@@ -161,6 +166,12 @@ class FakeBaseRoom(
     override suspend fun setIsLowPriority(isLowPriority: Boolean): Result<Unit> {
         return setIsLowPriorityResult(isLowPriority)
     }
+
+    override suspend fun tags(): Result<Map<RoomTagName, RoomTagInfo>> = tagsResult()
+
+    override suspend fun setTag(tag: RoomTagName, tagInfo: RoomTagInfo): Result<Unit> = setTagResult(tag, tagInfo)
+
+    override suspend fun removeTag(tag: RoomTagName): Result<Unit> = removeTagResult(tag)
 
     override suspend fun markAsRead(receiptType: ReceiptType): Result<Unit> {
         return markAsReadResult(receiptType)

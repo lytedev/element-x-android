@@ -48,6 +48,13 @@ sealed interface RoomListFilter {
     ) : RoomListFilter
 
     /**
+     * A filter that matches the rooms whose id is not among [values].
+     */
+    data class NonIdentifiers(
+        val values: List<RoomId>,
+    ) : RoomListFilter
+
+    /**
      * A filter that matches rooms that has unread notifications.
      */
     data object Unread : RoomListFilter

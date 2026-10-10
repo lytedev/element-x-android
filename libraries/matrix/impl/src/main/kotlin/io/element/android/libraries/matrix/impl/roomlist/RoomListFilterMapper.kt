@@ -19,6 +19,7 @@ import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.Invite
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.Joined
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.LowPriority
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonFavorite
+import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonIdentifiers
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonLeft
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonLowPriority
 import org.matrix.rustcomponents.sdk.RoomListEntriesDynamicFilterKind.NonSpace
@@ -67,6 +68,7 @@ internal object RoomListFilterMapper {
             is RoomListFilter.All -> All(filters = filter.filters.map { mapFilter(it) })
             is RoomListFilter.Any -> Any(filters = filter.filters.map { mapFilter(it) })
             is RoomListFilter.Identifiers -> Identifiers(identifiers = filter.values.map { it.value })
+            is RoomListFilter.NonIdentifiers -> NonIdentifiers(identifiers = filter.values.map { it.value })
             RoomListFilter.None -> None
             RoomListFilter.Category.Group -> Category(RoomListFilterCategory.GROUP)
             RoomListFilter.Category.People -> Category(RoomListFilterCategory.PEOPLE)
