@@ -81,6 +81,14 @@ interface SessionPreferencesStore {
     /** The video compression preset; defaults to [VideoCompressionPreset.STANDARD], including when the stored value is unreadable. */
     fun getVideoCompressionPreset(): Flow<VideoCompressionPreset>
 
+    /**
+     * @param collapsedSectionKeys the persistence keys of every room list section the user has collapsed.
+     */
+    suspend fun setCollapsedRoomListSectionKeys(collapsedSectionKeys: Set<String>)
+
+    /** The persistence keys of the room list sections the user has collapsed; defaults to none, so every section starts expanded. */
+    fun getCollapsedRoomListSectionKeys(): Flow<Set<String>>
+
     /** Erases every preference of this session, so they all fall back to their defaults. */
     suspend fun clear()
 }

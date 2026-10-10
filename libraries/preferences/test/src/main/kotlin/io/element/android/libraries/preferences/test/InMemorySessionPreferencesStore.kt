@@ -22,7 +22,9 @@ class InMemorySessionPreferencesStore(
     isSessionVerificationSkipped: Boolean = false,
     doesCompressMedia: Boolean = true,
     videoCompressionPreset: VideoCompressionPreset = VideoCompressionPreset.STANDARD,
+    collapsedRoomListSectionKeys: Set<String> = emptySet(),
 ) : SessionPreferencesStore {
+    private val collapsedRoomListSectionKeys = MutableStateFlow(collapsedRoomListSectionKeys)
     private val isSharePresenceEnabled = MutableStateFlow(isSharePresenceEnabled)
     private val isSendPublicReadReceiptsEnabled = MutableStateFlow(isSendPublicReadReceiptsEnabled)
     private val isRenderReadReceiptsEnabled = MutableStateFlow(isRenderReadReceiptsEnabled)
@@ -83,6 +85,12 @@ class InMemorySessionPreferencesStore(
     override fun getVideoCompressionPreset(): Flow<VideoCompressionPreset> {
         return videoCompressionPreset
     }
+
+    override suspend fun setCollapsedRoomListSectionKeys(collapsedSectionKeys: Set<String>) {
+        collapsedRoomListSectionKeys.value = collapsedSectionKeys
+    }
+
+    override fun getCollapsedRoomListSectionKeys(): Flow<Set<String>> = collapsedRoomListSectionKeys
 
     override suspend fun clear() {
         clearCallCount++
