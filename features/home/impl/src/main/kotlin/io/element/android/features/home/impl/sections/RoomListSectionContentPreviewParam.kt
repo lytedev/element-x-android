@@ -27,7 +27,7 @@ open class RoomListSectionContentPreviewParam : PreviewParameterProvider<RoomLis
                 ),
             ),
             aRoomListSectionContent(
-                section = RoomListSection.Rooms,
+                section = RoomListSection.Rooms(),
                 isCollapsed = true,
                 summaries = listOf(
                     aRoomListRoomSummary(id = "!call:domain", hasRoomCall = true),
@@ -46,7 +46,7 @@ open class RoomListSectionContentPreviewParam : PreviewParameterProvider<RoomLis
 }
 
 internal fun aRoomListSectionContent(
-    section: RoomListSection = RoomListSection.Rooms,
+    section: RoomListSection = RoomListSection.Rooms(),
     isCollapsed: Boolean = false,
     summaries: List<RoomListRoomSummary> = listOf(aRoomListRoomSummary()),
 ) = RoomListSectionContent(

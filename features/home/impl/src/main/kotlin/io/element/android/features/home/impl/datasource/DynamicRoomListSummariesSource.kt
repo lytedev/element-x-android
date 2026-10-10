@@ -47,7 +47,6 @@ class DynamicRoomListSummariesSource(
     private val roomListRoomSummaryFactory: RoomListRoomSummaryFactory,
     private val coroutineDispatchers: CoroutineDispatchers,
     private val analyticsService: AnalyticsService,
-    private val sdkFilterNarrowingTheUserSelectedFilter: (RoomListFilter) -> RoomListFilter = { userSelectedFilter -> userSelectedFilter },
     private val isRoomKeptAmongRoomsMatchingTheSdkFilter: (RoomListRoomSummary) -> Boolean = { true },
 ) {
     private val _roomSummariesFlow = MutableSharedFlow<ImmutableList<RoomListRoomSummary>>(replay = 1)
@@ -71,8 +70,8 @@ class DynamicRoomListSummariesSource(
             .launchIn(coroutineScope)
     }
 
-    suspend fun updateFilter(userSelectedFilter: RoomListFilter) {
-        dynamicRoomList.updateFilter(sdkFilterNarrowingTheUserSelectedFilter(userSelectedFilter))
+    suspend fun updateFilter(sdkFilter: RoomListFilter) {
+        dynamicRoomList.updateFilter(sdkFilter)
     }
 
     suspend fun updateVisibleRange(visibleRange: IntRange) = coroutineScope {

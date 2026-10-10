@@ -33,6 +33,7 @@ import io.element.android.libraries.designsystem.atomic.atoms.UnreadIndicatorAto
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.Icon
+import io.element.android.libraries.designsystem.theme.components.IconButton
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.ui.strings.CommonStrings
 
@@ -44,9 +45,10 @@ import io.element.android.libraries.ui.strings.CommonStrings
 internal fun RoomListSectionHeader(
     sectionContent: RoomListSectionContent,
     onToggleCollapse: (RoomListSection) -> Unit,
+    onShowOptions: (RoomListSection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sectionTitle = stringResource(sectionContent.section.titleResource)
+    val sectionTitle = roomListSectionTitle(sectionContent.section)
     val toggleCollapsedLabel = if (sectionContent.isCollapsed) {
         stringResource(R.string.a11y_roomlist_section_expand, sectionTitle)
     } else {
@@ -94,6 +96,34 @@ internal fun RoomListSectionHeader(
                 )
             }
         }
+        if (sectionContent.section.reorderableKey != null) {
+            IconButton(
+                modifier = Modifier.size(32.dp),
+                onClick = { onShowOptions(sectionContent.section) },
+            ) {
+                Icon(
+                    imageVector = CompoundIcons.OverflowVertical(),
+                    contentDescription = stringResource(R.string.a11y_roomlist_section_options, sectionTitle),
+                    tint = ElementTheme.colors.iconSecondary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun roomListSectionTitle(section: RoomListSection): String {
+    return when (section) {
+        RoomListSection.Invites -> stringResource(R.string.screen_roomlist_filter_invites)
+        RoomListSection.Favourites -> stringResource(R.string.screen_roomlist_filter_favourites)
+        RoomListSection.People -> stringResource(R.string.screen_roomlist_filter_people)
+        is RoomListSection.Rooms -> if (section.alsoHoldsDirectMessages) {
+            stringResource(R.string.screen_roomlist_section_chats)
+        } else {
+            stringResource(R.string.screen_roomlist_filter_rooms)
+        }
+        RoomListSection.LowPriority -> stringResource(R.string.screen_roomlist_section_low_priority)
+        is RoomListSection.Custom -> section.name
     }
 }
 
@@ -105,6 +135,7 @@ internal fun RoomListSectionHeaderPreview(@PreviewParameter(RoomListSectionConte
             RoomListSectionHeader(
                 sectionContent = sectionContent,
                 onToggleCollapse = {},
+                onShowOptions = {},
             )
         }
     }

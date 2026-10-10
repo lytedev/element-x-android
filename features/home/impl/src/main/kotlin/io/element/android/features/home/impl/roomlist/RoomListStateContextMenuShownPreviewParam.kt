@@ -17,7 +17,7 @@ open class RoomListStateContextMenuShownPreviewParam : PreviewParameterProvider<
             aContextMenuShown(hasNewContent = true),
             aContextMenuShown(isDm = true, isFavorite = true),
             aContextMenuShown(roomName = null),
-            aContextMenuShown(isLowPriority = true, showLowPriorityToggleBecauseSectionsAreEnabled = true),
+            aContextMenuShown(isLowPriority = true, showSectionActionsBecauseSectionsAreEnabled = true),
         )
 }
 
@@ -27,7 +27,7 @@ internal fun aContextMenuShown(
     hasNewContent: Boolean = false,
     isFavorite: Boolean = false,
     isLowPriority: Boolean = false,
-    showLowPriorityToggleBecauseSectionsAreEnabled: Boolean = false,
+    showSectionActionsBecauseSectionsAreEnabled: Boolean = false,
 ) = RoomListState.ContextMenu.Shown(
     roomId = RoomId("!aRoom:aDomain"),
     roomName = roomName,
@@ -35,5 +35,5 @@ internal fun aContextMenuShown(
     hasNewContent = hasNewContent,
     isFavorite = isFavorite,
     isLowPriority = isLowPriority,
-    showLowPriorityToggleBecauseSectionsAreEnabled = showLowPriorityToggleBecauseSectionsAreEnabled,
+    showSectionActionsBecauseSectionsAreEnabled = showSectionActionsBecauseSectionsAreEnabled,
 )

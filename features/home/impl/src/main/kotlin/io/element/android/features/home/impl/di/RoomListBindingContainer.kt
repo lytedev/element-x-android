@@ -19,6 +19,8 @@ import io.element.android.features.home.impl.search.GlobalSearchPresenter
 import io.element.android.features.home.impl.search.GlobalSearchState
 import io.element.android.features.home.impl.search.RoomListSearchPresenter
 import io.element.android.features.home.impl.search.RoomListSearchState
+import io.element.android.features.home.impl.sections.RoomListSectionsPresenter
+import io.element.android.features.home.impl.sections.RoomListSectionsState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersPresenter
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.libraries.architecture.Presenter
@@ -38,6 +40,9 @@ interface RoomListBindingContainer {
 
     @Binds
     fun bindSpaceFiltersPresenter(presenter: SpaceFiltersPresenter): Presenter<SpaceFiltersState>
+
+    @Binds
+    fun bindRoomListSectionsPresenter(presenter: RoomListSectionsPresenter): Presenter<RoomListSectionsState>
 
     @Binds
     fun bindGlobalSearchPresenter(presenter: GlobalSearchPresenter): Presenter<GlobalSearchState>

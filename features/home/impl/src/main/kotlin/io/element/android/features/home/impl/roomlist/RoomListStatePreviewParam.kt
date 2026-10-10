@@ -20,6 +20,8 @@ import io.element.android.features.home.impl.search.GlobalSearchState
 import io.element.android.features.home.impl.search.RoomListSearchState
 import io.element.android.features.home.impl.search.aGlobalSearchState
 import io.element.android.features.home.impl.search.aRoomListSearchState
+import io.element.android.features.home.impl.sections.RoomListSectionsState
+import io.element.android.features.home.impl.sections.aDisabledRoomListSectionsState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.anUnselectedSpaceFiltersState
 import io.element.android.features.invite.api.acceptdecline.AcceptDeclineInviteState
@@ -65,6 +67,7 @@ internal fun aRoomListState(
     acceptDeclineInviteState: AcceptDeclineInviteState = anAcceptDeclineInviteState(),
     hideInvitesAvatars: Boolean = false,
     canReportRoom: Boolean = true,
+    sectionsState: RoomListSectionsState = aDisabledRoomListSectionsState(),
     eventSink: (RoomListEvent) -> Unit = {}
 ) = RoomListState(
     contextMenu = contextMenu,
@@ -78,6 +81,7 @@ internal fun aRoomListState(
     acceptDeclineInviteState = acceptDeclineInviteState,
     hideInvitesAvatars = hideInvitesAvatars,
     canReportRoom = canReportRoom,
+    sectionsState = sectionsState,
     eventSink = eventSink,
 )
 

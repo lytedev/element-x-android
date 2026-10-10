@@ -50,9 +50,11 @@ import io.element.android.features.home.impl.roomlist.RoomListState
 import io.element.android.features.home.impl.search.GlobalSearchEvent
 import io.element.android.features.home.impl.search.GlobalSearchView
 import io.element.android.features.home.impl.search.RoomListSearchView
+import io.element.android.features.home.impl.sections.RoomListSectionsDialogs
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersEvent
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersView
+import io.element.android.features.home.impl.spacefilters.roomIdOfTheSelectedSpaceOrHomeSpaceKey
 import io.element.android.features.home.impl.spaces.HomeSpacesView
 import io.element.android.libraries.androidutils.throttler.FirstThrottler
 import io.element.android.libraries.designsystem.preview.ElementPreview
@@ -103,6 +105,10 @@ fun HomeView(
                 onReportRoomClick = onReportRoomClick,
             )
         }
+        RoomListSectionsDialogs(
+            state = state.sectionsState,
+            roomIdOfTheCurrentSpaceOrHomeSpaceKey = state.spaceFiltersState.roomIdOfTheSelectedSpaceOrHomeSpaceKey(),
+        )
         if (state.declineInviteMenu is RoomListState.DeclineInviteMenu.Shown) {
             RoomListDeclineInviteMenu(
                 menu = state.declineInviteMenu,
@@ -290,6 +296,7 @@ private fun HomeScaffold(
                             lazyListState = roomsLazyListState,
                             hideInvitesAvatars = roomListState.hideInvitesAvatars,
                             eventSink = roomListState.eventSink,
+                            sectionsEventSink = roomListState.sectionsState.eventSink,
                             onSetUpRecoveryClick = onSetUpRecoveryClick,
                             onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
                             onRoomClick = ::onRoomClick,

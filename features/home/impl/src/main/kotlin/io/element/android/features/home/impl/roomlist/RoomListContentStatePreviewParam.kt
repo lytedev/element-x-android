@@ -36,12 +36,12 @@ open class RoomListContentStatePreviewParam : PreviewParameterProvider<RoomListC
             ),
             aSectionedRoomsContentState(),
             aSectionedRoomsContentState(collapsedSections = setOf(RoomListSection.Favourites, RoomListSection.People)),
-            aSectionedRoomsContentState(sectionsWithRooms = listOf(RoomListSection.Rooms)),
+            aSectionedRoomsContentState(sectionsWithRooms = listOf(RoomListSection.Rooms())),
         )
 }
 
 internal fun aSectionedRoomsContentState(
-    sectionsWithRooms: List<RoomListSection> = listOf(RoomListSection.Favourites, RoomListSection.People, RoomListSection.Rooms),
+    sectionsWithRooms: List<RoomListSection> = listOf(RoomListSection.Favourites, RoomListSection.People, RoomListSection.Rooms()),
     collapsedSections: Set<RoomListSection> = emptySet(),
 ): RoomListContentState.Rooms {
     val nonEmptySections = sectionsWithRooms.map { section ->
@@ -49,13 +49,13 @@ internal fun aSectionedRoomsContentState(
             section = section,
             isCollapsed = section in collapsedSections,
             summaries = listOf(
-                aRoomListRoomSummary(id = "!${section.name}1:domain", name = "${section.name} 1", numberOfUnreadNotifications = 2),
-                aRoomListRoomSummary(id = "!${section.name}2:domain", name = "${section.name} 2"),
+                aRoomListRoomSummary(id = "!${section.persistenceKey}1:domain", name = "${section.persistenceKey} 1", numberOfUnreadNotifications = 2),
+                aRoomListRoomSummary(id = "!${section.persistenceKey}2:domain", name = "${section.persistenceKey} 2"),
             ),
         )
     }
     return aRoomsContentState(summaries = nonEmptySections.flatMap { it.summaries }.toImmutableList())
-        .copy(nonEmptySectionsWhenSectionsAreEnabled = nonEmptySections.toImmutableList())
+        .copy(shownSectionsWhenSectionsAreEnabled = nonEmptySections.toImmutableList())
 }
 
 internal fun aRoomsContentState(

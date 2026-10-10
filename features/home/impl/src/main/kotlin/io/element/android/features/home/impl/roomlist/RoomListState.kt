@@ -13,8 +13,9 @@ import io.element.android.features.home.impl.filters.RoomListFiltersState
 import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.search.GlobalSearchState
 import io.element.android.features.home.impl.search.RoomListSearchState
-import io.element.android.features.home.impl.sections.RoomListSection
 import io.element.android.features.home.impl.sections.RoomListSectionContent
+import io.element.android.features.home.impl.sections.RoomListSectionsLayout
+import io.element.android.features.home.impl.sections.RoomListSectionsState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.invite.api.acceptdecline.AcceptDeclineInviteState
 import io.element.android.features.leaveroom.api.LeaveRoomState
@@ -37,6 +38,7 @@ data class RoomListState(
     val acceptDeclineInviteState: AcceptDeclineInviteState,
     val hideInvitesAvatars: Boolean,
     val canReportRoom: Boolean,
+    val sectionsState: RoomListSectionsState,
     val eventSink: (RoomListEvent) -> Unit,
 ) {
     val displayFilters = contentState is RoomListContentState.Rooms
@@ -50,7 +52,7 @@ data class RoomListState(
             val isFavorite: Boolean,
             val hasNewContent: Boolean,
             val isLowPriority: Boolean = false,
-            val showLowPriorityToggleBecauseSectionsAreEnabled: Boolean = false,
+            val showSectionActionsBecauseSectionsAreEnabled: Boolean = false,
         ) : ContextMenu
     }
 
@@ -82,11 +84,8 @@ sealed interface RoomListContentState {
         val summaries: ImmutableList<RoomListRoomSummary>,
         val seenRoomInvites: ImmutableSet<RoomId>,
         val showAllActivity: Boolean,
-        val nonEmptySectionsWhenSectionsAreEnabled: ImmutableList<RoomListSectionContent> = persistentListOf(),
+        val shownSectionsWhenSectionsAreEnabled: ImmutableList<RoomListSectionContent> = persistentListOf(),
     ) : RoomListContentState {
-        val showSectionHeaders: Boolean = nonEmptySectionsWhenSectionsAreEnabled.map { it.section } !in listOf(
-            emptyList(),
-            listOf(RoomListSection.sectionThatIsDrawnWithoutHeaderWhenItIsTheOnlyOneWithRooms),
-        )
+        val showSectionHeaders: Boolean = !RoomListSectionsLayout.isDrawnWithoutHeaders(shownSectionsWhenSectionsAreEnabled.map { it.section })
     }
 }

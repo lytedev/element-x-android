@@ -9,6 +9,7 @@ package io.element.android.features.home.impl.spacefilters
 
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Immutable
+import io.element.android.features.home.impl.sections.custom.ElementWebRoomListSettings
 import io.element.android.libraries.matrix.api.roomlist.RoomListFilter
 import io.element.android.libraries.matrix.api.spaces.SpaceServiceFilter
 import kotlinx.collections.immutable.ImmutableList
@@ -53,4 +54,11 @@ fun SpaceFiltersState.selectedFilter(): SpaceServiceFilter? {
 
 fun SpaceServiceFilter?.into(): RoomListFilter? {
     return this?.let { RoomListFilter.Identifiers(descendants) }
+}
+
+/**
+ * The key Element Web uses for the space a custom room list section was created in.
+ */
+fun SpaceFiltersState.roomIdOfTheSelectedSpaceOrHomeSpaceKey(): String {
+    return selectedFilter()?.spaceRoom?.roomId?.value ?: ElementWebRoomListSettings.HOME_SPACE_KEY
 }

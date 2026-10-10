@@ -15,7 +15,7 @@ class RoomListSectionsLazyListLayoutTest {
     private fun aSectionWithRooms(section: RoomListSection, numberOfRooms: Int, isCollapsed: Boolean = false) = aRoomListSectionContent(
         section = section,
         isCollapsed = isCollapsed,
-        summaries = List(numberOfRooms) { roomIndex -> aRoomListRoomSummary(id = "!${section.name}$roomIndex:domain") },
+        summaries = List(numberOfRooms) { roomIndex -> aRoomListRoomSummary(id = "!${section.persistenceKey}$roomIndex:domain") },
     )
 
     @Test
@@ -24,7 +24,7 @@ class RoomListSectionsLazyListLayoutTest {
             numberOfLazyListItemsBeforeTheSections = 1,
             sections = listOf(
                 aSectionWithRooms(RoomListSection.Favourites, numberOfRooms = 3),
-                aSectionWithRooms(RoomListSection.Rooms, numberOfRooms = 10),
+                aSectionWithRooms(RoomListSection.Rooms(), numberOfRooms = 10),
             ),
             showSectionHeaders = true,
         )
@@ -38,7 +38,7 @@ class RoomListSectionsLazyListLayoutTest {
         ).that(visibleRoomRangesBySection).containsExactly(
             RoomListSection.Favourites,
             1..2,
-            RoomListSection.Rooms,
+            RoomListSection.Rooms(),
             0..2,
         )
     }
@@ -49,7 +49,7 @@ class RoomListSectionsLazyListLayoutTest {
             numberOfLazyListItemsBeforeTheSections = 0,
             sections = listOf(
                 aSectionWithRooms(RoomListSection.Favourites, numberOfRooms = 50, isCollapsed = true),
-                aSectionWithRooms(RoomListSection.Rooms, numberOfRooms = 10),
+                aSectionWithRooms(RoomListSection.Rooms(), numberOfRooms = 10),
             ),
             showSectionHeaders = true,
         )
@@ -59,14 +59,14 @@ class RoomListSectionsLazyListLayoutTest {
 
         assertWithMessage(
             "the 50 favourites are collapsed, so they must not count as visible nor push the rooms of the Rooms section down",
-        ).that(visibleRoomRangesBySection).containsExactly(RoomListSection.Rooms, 0..3)
+        ).that(visibleRoomRangesBySection).containsExactly(RoomListSection.Rooms(), 0..3)
     }
 
     @Test
     fun `without section headers the rooms of a section start right after the items placed before the sections`() {
         val layout = RoomListSectionsLazyListLayout(
             numberOfLazyListItemsBeforeTheSections = 0,
-            sections = listOf(aSectionWithRooms(RoomListSection.Rooms, numberOfRooms = 30)),
+            sections = listOf(aSectionWithRooms(RoomListSection.Rooms(), numberOfRooms = 30)),
             showSectionHeaders = false,
         )
 
@@ -74,6 +74,6 @@ class RoomListSectionsLazyListLayoutTest {
 
         assertWithMessage(
             "when Rooms is the only section it is drawn without header, so lazy index and room index must be the same",
-        ).that(visibleRoomRangesBySection).containsExactly(RoomListSection.Rooms, 10..20)
+        ).that(visibleRoomRangesBySection).containsExactly(RoomListSection.Rooms(), 10..20)
     }
 }

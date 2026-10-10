@@ -7,84 +7,67 @@
 
 package io.element.android.features.home.impl.sections
 
-import androidx.annotation.StringRes
-import io.element.android.features.home.impl.R
+import androidx.compose.runtime.Immutable
 import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.model.RoomSummaryDisplayType
-import io.element.android.libraries.matrix.api.roomlist.RoomListFilter
+import io.element.android.features.home.impl.sections.custom.ElementWebRoomListSettings
+import io.element.android.features.home.impl.sections.custom.ReorderableRoomListSectionKey
+import io.element.android.libraries.matrix.api.room.tags.RoomTagName
 
 /**
- * The sections of the room list, in display order, mirroring the default sections of Element Web.
- *
- * Every room belongs to exactly one section: a pending invite belongs to [Invites], whatever its tags.
- * Otherwise a room belongs to the first section whose tag it carries, so a room tagged both favourite and low priority is a favourite.
- * Untagged rooms belong to [People] when they are direct messages, and to [Rooms] otherwise.
+ * A section of the room list. The order of the sections and which section each room belongs to are decided by [RoomListSectionsLayout].
  */
-enum class RoomListSection(
-    val persistenceKey: String,
-    @StringRes val titleResource: Int,
-    private val roomsOfThisSectionFilter: RoomListFilter,
-) {
-    Invites(
-        persistenceKey = "invites",
-        titleResource = R.string.screen_roomlist_filter_invites,
-        roomsOfThisSectionFilter = RoomListFilter.Invite,
-    ),
-    Favourites(
-        persistenceKey = "m.favourite",
-        titleResource = R.string.screen_roomlist_filter_favourites,
-        roomsOfThisSectionFilter = RoomListFilter.Favorite,
-    ),
-    People(
-        persistenceKey = "m.dm",
-        titleResource = R.string.screen_roomlist_filter_people,
-        roomsOfThisSectionFilter = RoomListFilter.all(
-            RoomListFilter.Category.People,
-            RoomListFilter.NonFavorite,
-            RoomListFilter.NonLowPriority,
-        ),
-    ),
-    Rooms(
-        persistenceKey = "chats",
-        titleResource = R.string.screen_roomlist_filter_rooms,
-        roomsOfThisSectionFilter = RoomListFilter.all(
-            RoomListFilter.Category.Group,
-            RoomListFilter.NonFavorite,
-            RoomListFilter.NonLowPriority,
-        ),
-    ),
-    LowPriority(
-        persistenceKey = "m.lowpriority",
-        titleResource = R.string.screen_roomlist_section_low_priority,
-        roomsOfThisSectionFilter = RoomListFilter.all(
-            RoomListFilter.LowPriority,
-            RoomListFilter.NonFavorite,
-        ),
-    );
+@Immutable
+sealed interface RoomListSection {
+    /**
+     * Identifies the section in local storage, such as the collapsed sections.
+     */
+    val persistenceKey: String
 
     /**
-     * The rooms that the user selected with the filter chips and the space filter, narrowed down to the rooms of this section.
+     * Null for Invites, Favourites and Low priority, which always stay at the top or the bottom of the list.
      */
-    fun roomsOfThisSectionAmong(userSelectedFilter: RoomListFilter): RoomListFilter {
-        return RoomListFilter.all(userSelectedFilter, roomsOfThisSectionFilter)
+    val reorderableKey: ReorderableRoomListSectionKey?
+
+    data object Invites : RoomListSection {
+        override val persistenceKey = "invites"
+        override val reorderableKey = null
+    }
+
+    data object Favourites : RoomListSection {
+        override val persistenceKey = RoomTagName.FAVOURITE.value
+        override val reorderableKey = null
+    }
+
+    data object People : RoomListSection {
+        override val persistenceKey = "m.dm"
+        override val reorderableKey = ReorderableRoomListSectionKey.People
     }
 
     /**
-     * The SDK has no filter excluding invites alone, and excluding them with [RoomListFilter.Joined] would also drop knocked rooms,
-     * so the invites matched by the tag and category filters are left out here instead.
+     * Titled Chats instead of Rooms when the People section is hidden, as it then also holds the direct messages.
+     */
+    data class Rooms(val alsoHoldsDirectMessages: Boolean = false) : RoomListSection {
+        override val persistenceKey = ElementWebRoomListSettings.CHATS_SECTION_ORDER_KEY
+        override val reorderableKey = ReorderableRoomListSectionKey.Chats
+    }
+
+    data object LowPriority : RoomListSection {
+        override val persistenceKey = RoomTagName.LOW_PRIORITY.value
+        override val reorderableKey = null
+    }
+
+    data class Custom(val tag: RoomTagName, val name: String) : RoomListSection {
+        override val persistenceKey = tag.value
+        override val reorderableKey = ReorderableRoomListSectionKey.Custom(tag)
+    }
+
+    /**
+     * The SDK has no filter excluding invites alone, and excluding them with Joined would also drop knocked rooms,
+     * so the invites matched by the filters of the other sections are left out here instead.
      */
     fun containsRoom(roomSummary: RoomListRoomSummary): Boolean {
         val isPendingInvite = roomSummary.displayType == RoomSummaryDisplayType.INVITE
-        return when (this) {
-            Invites -> isPendingInvite
-            Favourites, People, Rooms, LowPriority -> !isPendingInvite
-        }
-    }
-
-    companion object {
-        /**
-         * When the only section with rooms is [Rooms], Element Web draws the list without any header, as if sections were disabled.
-         */
-        val sectionThatIsDrawnWithoutHeaderWhenItIsTheOnlyOneWithRooms = Rooms
+        return if (this == Invites) isPendingInvite else !isPendingInvite
     }
 }

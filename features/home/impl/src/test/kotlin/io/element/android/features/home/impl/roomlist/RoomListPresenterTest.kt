@@ -26,6 +26,13 @@ import io.element.android.features.home.impl.search.RoomListSearchState
 import io.element.android.features.home.impl.search.aGlobalSearchState
 import io.element.android.features.home.impl.search.aRoomListSearchState
 import io.element.android.features.home.impl.sections.RoomListSection
+import io.element.android.features.home.impl.sections.RoomListSectionsEvent
+import io.element.android.features.home.impl.sections.RoomListSectionsLayout
+import io.element.android.features.home.impl.sections.RoomListSectionsPresenter
+import io.element.android.features.home.impl.sections.custom.RoomListSectionsSettings
+import io.element.android.features.home.impl.sections.custom.RoomListSectionsSettingsStore
+import io.element.android.features.home.impl.sections.custom.RoomSectionMover
+import io.element.android.features.home.impl.sections.custom.RoomSectionTagsIndex
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.aDisabledSpaceFiltersState
 import io.element.android.features.invite.api.SeenInvitesStore
@@ -405,7 +412,7 @@ class RoomListPresenterTest {
     @Test
     fun `toggling low priority from the context menu sets and then clears the low priority tag of the room`() = runTest {
         val setIsLowPriorityResult = lambdaRecorder { _: Boolean -> Result.success(Unit) }
-        val client = FakeMatrixClient().apply {
+        val client = FakeMatrixClient(getAccountDataLambda = { Result.success(null) }).apply {
             givenGetRoomResult(A_ROOM_ID, FakeBaseRoom(setIsLowPriorityResult = setIsLowPriorityResult))
         }
         val presenter = createRoomListPresenter(client = client, featureFlagService = aSectionsEnabledFeatureFlagService())
@@ -427,6 +434,7 @@ class RoomListPresenterTest {
         val roomSummary = aRoomListRoomSummary()
         listOf(true, false).forEach { isRoomListSectionsEnabled ->
             val presenter = createRoomListPresenter(
+                client = FakeMatrixClient(getAccountDataLambda = { Result.success(null) }),
                 featureFlagService = FakeFeatureFlagService(initialState = mapOf(FeatureFlags.RoomListSections.key to isRoomListSectionsEnabled)),
             )
             presenter.test {
@@ -434,7 +442,7 @@ class RoomListPresenterTest {
                 val stateWithContextMenu = consumeItemsUntilPredicate { state -> state.contextMenu is RoomListState.ContextMenu.Shown }.last()
                 val shownContextMenu = stateWithContextMenu.contextMenu as RoomListState.ContextMenu.Shown
                 assertWithMessage("with sections enabled = $isRoomListSectionsEnabled, the low priority toggle visibility must match")
-                    .that(shownContextMenu.showLowPriorityToggleBecauseSectionsAreEnabled)
+                    .that(shownContextMenu.showSectionActionsBecauseSectionsAreEnabled)
                     .isEqualTo(isRoomListSectionsEnabled)
                 cancelAndIgnoreRemainingEvents()
             }
@@ -757,14 +765,20 @@ class RoomListPresenterTest {
      */
     private class RoomListsOfEachSection {
         val flatRoomList = FakeDynamicRoomList(loadingState = MutableStateFlow(RoomList.LoadingState.Loaded(numberOfRooms = 3)))
-        val roomListBySection: Map<RoomListSection, FakeDynamicRoomList> = RoomListSection.entries.associateWith { FakeDynamicRoomList() }
+        private val defaultLayout = RoomListSectionsLayout(RoomListSectionsSettings.DEFAULT, tagsOfRoomsInCustomSections = emptyMap())
+        val roomListBySection: Map<RoomListSection, FakeDynamicRoomList> = defaultLayout.sectionsInDisplayOrder.associateWith { FakeDynamicRoomList() }
         val roomListService = FakeRoomListService(
             createRoomListWithInitialFilterLambda = { _, initialFilter ->
-                RoomListSection.entries
-                    .firstOrNull { section -> section.roomsOfThisSectionAmong(RoomListFilter.all()) == initialFilter }
+                defaultLayout.sectionsInDisplayOrder
+                    .firstOrNull { section -> defaultLayout.roomsOfSectionAmong(section, RoomListFilter.all()) == initialFilter }
                     ?.let(roomListBySection::getValue)
                     ?: flatRoomList
             },
+        )
+
+        fun aMatrixClientWithoutStoredSectionSettings() = FakeMatrixClient(
+            roomListService = roomListService,
+            getAccountDataLambda = { Result.success(null) },
         )
     }
 
@@ -774,23 +788,23 @@ class RoomListPresenterTest {
     fun `with sections enabled, only the sections holding rooms are shown, in the section order`() = runTest {
         val roomListsOfEachSection = RoomListsOfEachSection()
         val presenter = createRoomListPresenter(
-            client = FakeMatrixClient(roomListService = roomListsOfEachSection.roomListService),
+            client = roomListsOfEachSection.aMatrixClientWithoutStoredSectionSettings(),
             featureFlagService = aSectionsEnabledFeatureFlagService(),
         )
         presenter.test {
-            roomListsOfEachSection.roomListBySection.getValue(RoomListSection.Rooms).summaries.emit(listOf(aRoomSummary(roomId = A_ROOM_ID)))
+            roomListsOfEachSection.roomListBySection.getValue(RoomListSection.Rooms()).summaries.emit(listOf(aRoomSummary(roomId = A_ROOM_ID)))
             roomListsOfEachSection.roomListBySection.getValue(RoomListSection.Favourites).summaries.emit(
                 listOf(aRoomSummary(roomId = A_ROOM_ID_2, isFavorite = true))
             )
 
             val stateWithBothSections = consumeItemsUntilPredicate { state ->
-                (state.contentState as? RoomListContentState.Rooms)?.nonEmptySectionsWhenSectionsAreEnabled?.size == 2
+                (state.contentState as? RoomListContentState.Rooms)?.shownSectionsWhenSectionsAreEnabled?.size == 2
             }.last().contentAsRooms()
 
             assertWithMessage(
                 "Favourites must come before Rooms, and the sections without any room (Invites, People, Low priority) must be hidden",
-            ).that(stateWithBothSections.nonEmptySectionsWhenSectionsAreEnabled.map { it.section })
-                .containsExactly(RoomListSection.Favourites, RoomListSection.Rooms)
+            ).that(stateWithBothSections.shownSectionsWhenSectionsAreEnabled.map { it.section })
+                .containsExactly(RoomListSection.Favourites, RoomListSection.Rooms())
                 .inOrder()
             assertWithMessage("with more than one section holding rooms, each section must be introduced by its header")
                 .that(stateWithBothSections.showSectionHeaders)
@@ -807,7 +821,7 @@ class RoomListPresenterTest {
     fun `with sections enabled, an invite matched by the filters of the People section is only listed under Invites`() = runTest {
         val roomListsOfEachSection = RoomListsOfEachSection()
         val presenter = createRoomListPresenter(
-            client = FakeMatrixClient(roomListService = roomListsOfEachSection.roomListService),
+            client = roomListsOfEachSection.aMatrixClientWithoutStoredSectionSettings(),
             featureFlagService = aSectionsEnabledFeatureFlagService(),
         )
         presenter.test {
@@ -816,11 +830,11 @@ class RoomListPresenterTest {
             roomListsOfEachSection.roomListBySection.getValue(RoomListSection.Invites).summaries.emit(listOf(invitedDirectMessage))
 
             val stateWithTheInvite = consumeItemsUntilPredicate { state ->
-                (state.contentState as? RoomListContentState.Rooms)?.nonEmptySectionsWhenSectionsAreEnabled?.isNotEmpty() == true
+                (state.contentState as? RoomListContentState.Rooms)?.shownSectionsWhenSectionsAreEnabled?.isNotEmpty() == true
             }.last().contentAsRooms()
 
             assertWithMessage("the invited direct message must not be repeated in People, so Invites must be the only section shown")
-                .that(stateWithTheInvite.nonEmptySectionsWhenSectionsAreEnabled.map { it.section })
+                .that(stateWithTheInvite.shownSectionsWhenSectionsAreEnabled.map { it.section })
                 .containsExactly(RoomListSection.Invites)
             cancelAndIgnoreRemainingEvents()
         }
@@ -831,7 +845,7 @@ class RoomListPresenterTest {
         val roomListsOfEachSection = RoomListsOfEachSection()
         val sessionPreferencesStore = InMemorySessionPreferencesStore()
         val presenter = createRoomListPresenter(
-            client = FakeMatrixClient(roomListService = roomListsOfEachSection.roomListService),
+            client = roomListsOfEachSection.aMatrixClientWithoutStoredSectionSettings(),
             featureFlagService = aSectionsEnabledFeatureFlagService(),
             sessionPreferencesStore = sessionPreferencesStore,
         )
@@ -840,14 +854,14 @@ class RoomListPresenterTest {
                 listOf(aRoomSummary(roomId = A_ROOM_ID, isFavorite = true))
             )
             val expandedState = consumeItemsUntilPredicate { state ->
-                (state.contentState as? RoomListContentState.Rooms)?.nonEmptySectionsWhenSectionsAreEnabled?.isNotEmpty() == true
+                (state.contentState as? RoomListContentState.Rooms)?.shownSectionsWhenSectionsAreEnabled?.isNotEmpty() == true
             }.last()
 
-            expandedState.eventSink(RoomListEvent.ToggleSectionCollapsed(RoomListSection.Favourites))
+            expandedState.sectionsState.eventSink(RoomListSectionsEvent.ToggleSectionCollapsed(RoomListSection.Favourites))
 
             val collapsedFavourites = consumeItemsUntilPredicate { state ->
-                (state.contentState as? RoomListContentState.Rooms)?.nonEmptySectionsWhenSectionsAreEnabled?.firstOrNull()?.isCollapsed == true
-            }.last().contentAsRooms().nonEmptySectionsWhenSectionsAreEnabled.single()
+                (state.contentState as? RoomListContentState.Rooms)?.shownSectionsWhenSectionsAreEnabled?.firstOrNull()?.isCollapsed == true
+            }.last().contentAsRooms().shownSectionsWhenSectionsAreEnabled.single()
             assertWithMessage("a collapsed section must hide its rooms").that(collapsedFavourites.visibleSummaries).isEmpty()
             assertWithMessage("the collapsed state must be stored, so that the section is still collapsed when the room list is opened again")
                 .that(sessionPreferencesStore.getCollapsedRoomListSectionKeys().first())
@@ -872,10 +886,8 @@ class RoomListPresenterTest {
         announcementService: AnnouncementService = FakeAnnouncementService(),
         featureFlagService: FeatureFlagService = FakeFeatureFlagService(),
         markRoomAsRead: MarkRoomAsRead? = null,
-    ) = RoomListPresenter(
-        client = client,
-        leaveRoomPresenter = { leaveRoomState },
-        roomListDataSource = RoomListDataSource(
+    ): RoomListPresenter {
+        val roomListDataSource = RoomListDataSource(
             roomListService = client.roomListService,
             roomListRoomSummaryFactory = aRoomListRoomSummaryFactory(
                 dateFormatter = dateFormatter,
@@ -886,7 +898,57 @@ class RoomListPresenterTest {
             sessionCoroutineScope = backgroundScope,
             dateTimeObserver = FakeDateTimeObserver(),
             analyticsService = FakeAnalyticsService(),
-        ),
+        )
+        val roomSectionTagsIndex = RoomSectionTagsIndex(client, backgroundScope)
+        val roomSectionMover = RoomSectionMover(client, roomSectionTagsIndex)
+        return createRoomListPresenter(
+            client = client,
+            leaveRoomState = leaveRoomState,
+            roomListDataSource = roomListDataSource,
+            roomListSectionsPresenter = RoomListSectionsPresenter(
+                featureFlagService = featureFlagService,
+                sessionPreferencesStore = sessionPreferencesStore,
+                roomListSectionsSettingsStore = RoomListSectionsSettingsStore(client, backgroundScope),
+                roomSectionTagsIndex = roomSectionTagsIndex,
+                roomSectionMover = roomSectionMover,
+                roomListDataSource = roomListDataSource,
+            ),
+            roomSectionMover = roomSectionMover,
+            sessionPreferencesStore = sessionPreferencesStore,
+            analyticsService = analyticsService,
+            filtersPresenter = filtersPresenter,
+            searchPresenter = searchPresenter,
+            spaceFiltersPresenter = spaceFiltersPresenter,
+            acceptDeclineInvitePresenter = acceptDeclineInvitePresenter,
+            notificationCleaner = notificationCleaner,
+            seenInvitesStore = seenInvitesStore,
+            announcementService = announcementService,
+            featureFlagService = featureFlagService,
+            markRoomAsRead = markRoomAsRead,
+        )
+    }
+
+    private fun createRoomListPresenter(
+        client: MatrixClient,
+        leaveRoomState: LeaveRoomState,
+        roomListDataSource: RoomListDataSource,
+        roomListSectionsPresenter: RoomListSectionsPresenter,
+        roomSectionMover: RoomSectionMover,
+        sessionPreferencesStore: SessionPreferencesStore,
+        analyticsService: AnalyticsService,
+        filtersPresenter: Presenter<RoomListFiltersState>,
+        searchPresenter: Presenter<RoomListSearchState>,
+        spaceFiltersPresenter: Presenter<SpaceFiltersState>,
+        acceptDeclineInvitePresenter: Presenter<AcceptDeclineInviteState>,
+        notificationCleaner: NotificationCleaner,
+        seenInvitesStore: SeenInvitesStore,
+        announcementService: AnnouncementService,
+        featureFlagService: FeatureFlagService,
+        markRoomAsRead: MarkRoomAsRead?,
+    ) = RoomListPresenter(
+        client = client,
+        leaveRoomPresenter = { leaveRoomState },
+        roomListDataSource = roomListDataSource,
         searchPresenter = searchPresenter,
         globalSearchPresenter = { aGlobalSearchState() },
         filtersPresenter = filtersPresenter,
@@ -904,6 +966,7 @@ class RoomListPresenterTest {
         announcementService = announcementService,
         coldStartWatcher = FakeAnalyticsColdStartWatcher(),
         featureFlagService = featureFlagService,
-        sessionPreferencesStore = sessionPreferencesStore,
+        roomListSectionsPresenter = roomListSectionsPresenter,
+        roomSectionMover = roomSectionMover,
     )
 }

@@ -72,6 +72,9 @@ fun RoomListContextMenu(
             onLowPriorityChange = { isLowPriority ->
                 eventSink(RoomListEvent.SetRoomIsLowPriority(contextMenu.roomId, isLowPriority))
             },
+            onMoveToSectionClick = {
+                eventSink(RoomListEvent.ShowMoveRoomToSection(contextMenu.roomId, contextMenu.roomName))
+            },
             onReportRoomClick = {
                 eventSink(RoomListEvent.HideContextMenu)
                 onReportRoomClick(contextMenu.roomId)
@@ -88,6 +91,7 @@ private fun RoomListModalBottomSheetContent(
     onLeaveRoomClick: () -> Unit,
     onFavoriteChange: (isFavorite: Boolean) -> Unit,
     onLowPriorityChange: (isLowPriority: Boolean) -> Unit,
+    onMoveToSectionClick: () -> Unit,
     onRoomMarkReadClick: () -> Unit,
     onRoomMarkUnreadClick: () -> Unit,
     onReportRoomClick: () -> Unit,
@@ -157,7 +161,7 @@ private fun RoomListModalBottomSheetContent(
                 onFavoriteChange(!contextMenu.isFavorite)
             },
         )
-        if (contextMenu.showLowPriorityToggleBecauseSectionsAreEnabled) {
+        if (contextMenu.showSectionActionsBecauseSectionsAreEnabled) {
             ListItem(
                 content = {
                     Text(
@@ -174,6 +178,18 @@ private fun RoomListModalBottomSheetContent(
                 onClick = {
                     onLowPriorityChange(!contextMenu.isLowPriority)
                 },
+            )
+            ListItem(
+                content = {
+                    Text(
+                        text = stringResource(id = R.string.screen_roomlist_move_to_section),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                },
+                leadingContent = ListItemContent.Icon(
+                    iconSource = IconSource.Vector(CompoundIcons.Folder())
+                ),
+                onClick = onMoveToSectionClick,
             )
         }
         ListItem(

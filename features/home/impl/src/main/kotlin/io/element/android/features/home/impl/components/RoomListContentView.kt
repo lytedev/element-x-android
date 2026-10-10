@@ -45,6 +45,7 @@ import io.element.android.features.home.impl.roomlist.RoomListContentStatePrevie
 import io.element.android.features.home.impl.roomlist.RoomListEvent
 import io.element.android.features.home.impl.roomlist.SecurityBannerState
 import io.element.android.features.home.impl.sections.RoomListSectionHeader
+import io.element.android.features.home.impl.sections.RoomListSectionsEvent
 import io.element.android.features.home.impl.sections.RoomListSectionsLazyListLayout
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.anUnselectedSpaceFiltersState
@@ -66,6 +67,7 @@ fun RoomListContentView(
     lazyListState: LazyListState,
     hideInvitesAvatars: Boolean,
     eventSink: (RoomListEvent) -> Unit,
+    sectionsEventSink: (RoomListSectionsEvent) -> Unit,
     onSetUpRecoveryClick: () -> Unit,
     onConfirmRecoveryKeyClick: () -> Unit,
     onRoomClick: (RoomListRoomSummary) -> Unit,
@@ -99,6 +101,7 @@ fun RoomListContentView(
                 filtersState = filtersState,
                 spaceFiltersState = spaceFiltersState,
                 eventSink = eventSink,
+                sectionsEventSink = sectionsEventSink,
                 onSetUpRecoveryClick = onSetUpRecoveryClick,
                 onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
                 onRoomClick = onRoomClick,
@@ -188,6 +191,7 @@ private fun RoomsView(
     filtersState: RoomListFiltersState,
     spaceFiltersState: SpaceFiltersState,
     eventSink: (RoomListEvent) -> Unit,
+    sectionsEventSink: (RoomListSectionsEvent) -> Unit,
     onSetUpRecoveryClick: () -> Unit,
     onConfirmRecoveryKeyClick: () -> Unit,
     onRoomClick: (RoomListRoomSummary) -> Unit,
@@ -208,6 +212,7 @@ private fun RoomsView(
             state = state,
             hideInvitesAvatars = hideInvitesAvatars,
             eventSink = eventSink,
+            sectionsEventSink = sectionsEventSink,
             onSetUpRecoveryClick = onSetUpRecoveryClick,
             onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
             onRoomClick = onRoomClick,
@@ -223,6 +228,7 @@ private fun RoomsViewList(
     state: RoomListContentState.Rooms,
     hideInvitesAvatars: Boolean,
     eventSink: (RoomListEvent) -> Unit,
+    sectionsEventSink: (RoomListSectionsEvent) -> Unit,
     onSetUpRecoveryClick: () -> Unit,
     onConfirmRecoveryKeyClick: () -> Unit,
     onRoomClick: (RoomListRoomSummary) -> Unit,
@@ -237,10 +243,10 @@ private fun RoomsViewList(
             state.batteryOptimizationState.shouldDisplayBanner ||
             state.showNewNotificationSoundBanner
     }
-    val isSectioned = state.nonEmptySectionsWhenSectionsAreEnabled.isNotEmpty()
+    val isSectioned = state.shownSectionsWhenSectionsAreEnabled.isNotEmpty()
     val sectionsLazyListLayout = RoomListSectionsLazyListLayout(
         numberOfLazyListItemsBeforeTheSections = if (isBannerShown) 1 else 0,
-        sections = state.nonEmptySectionsWhenSectionsAreEnabled,
+        sections = state.shownSectionsWhenSectionsAreEnabled,
         showSectionHeaders = state.showSectionHeaders,
     )
     OnVisibleRangeChangeEffect(lazyListState) { visibleRange ->
@@ -298,12 +304,13 @@ private fun RoomsViewList(
         }
 
         if (isSectioned) {
-            state.nonEmptySectionsWhenSectionsAreEnabled.forEach { sectionContent ->
+            state.shownSectionsWhenSectionsAreEnabled.forEach { sectionContent ->
                 if (state.showSectionHeaders) {
                     item(contentType = "section_header") {
                         RoomListSectionHeader(
                             sectionContent = sectionContent,
-                            onToggleCollapse = { section -> eventSink(RoomListEvent.ToggleSectionCollapsed(section)) },
+                            onToggleCollapse = { section -> sectionsEventSink(RoomListSectionsEvent.ToggleSectionCollapsed(section)) },
+                            onShowOptions = { section -> sectionsEventSink(RoomListSectionsEvent.ShowSectionOptions(section)) },
                         )
                     }
                 }
@@ -421,6 +428,7 @@ internal fun RoomListContentViewPreview(@PreviewParameter(RoomListContentStatePr
         spaceFiltersState = anUnselectedSpaceFiltersState(),
         hideInvitesAvatars = false,
         eventSink = {},
+        sectionsEventSink = {},
         onSetUpRecoveryClick = {},
         onConfirmRecoveryKeyClick = {},
         onRoomClick = {},
