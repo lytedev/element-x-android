@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import dev.zacsweers.metro.Inject
 import io.element.android.features.home.impl.datasource.RoomListDataSource
 import io.element.android.features.home.impl.datasource.RoomListSectionWithItsRooms
+import io.element.android.features.home.impl.model.RoomSummaryDisplayType
 import io.element.android.features.home.impl.sections.custom.CustomRoomListSectionDefinition
 import io.element.android.features.home.impl.sections.custom.ElementWebRoomListSettings
 import io.element.android.features.home.impl.sections.custom.RoomListSectionsSettings
@@ -31,6 +32,7 @@ import io.element.android.features.home.impl.sections.custom.withNewCustomSectio
 import io.element.android.features.home.impl.sections.custom.withRenamedCustomSection
 import io.element.android.features.home.impl.sections.custom.withSectionMoved
 import io.element.android.features.home.impl.sections.custom.withoutCustomSection
+import io.element.android.features.preferences.impl.tasks.MarkRoomAsRead
 import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.featureflag.api.FeatureFlagService
 import io.element.android.libraries.featureflag.api.FeatureFlags
@@ -54,6 +56,7 @@ class RoomListSectionsPresenter(
     private val roomSectionTagsIndex: RoomSectionTagsIndex,
     private val roomSectionMover: RoomSectionMover,
     private val roomListDataSource: RoomListDataSource,
+    private val markRoomAsRead: MarkRoomAsRead,
 ) : Presenter<RoomListSectionsState> {
     @Composable
     override fun present(): RoomListSectionsState {
@@ -113,6 +116,16 @@ class RoomListSectionsPresenter(
                         canMoveTowardsTop = reorderableKey != null && settings.canMove(reorderableKey, SectionMoveDirection.TowardsTop),
                         canMoveTowardsBottom = reorderableKey != null && settings.canMove(reorderableKey, SectionMoveDirection.TowardsBottom),
                     )
+                }
+                is RoomListSectionsEvent.MarkSectionAsRead -> {
+                    dialog = RoomListSectionsDialog.None
+                    coroutineScope.launch {
+                        roomListDataSource.loadedRoomSummariesOf(event.section)
+                            .filter { room -> room.hasNewContent && room.displayType != RoomSummaryDisplayType.INVITE }
+                            .forEach { room ->
+                                markRoomAsRead(room.roomId).onFailure { Timber.e(it, "Could not mark room ${room.roomId} as read") }
+                            }
+                    }
                 }
                 is RoomListSectionsEvent.MoveSection -> {
                     dialog = RoomListSectionsDialog.None

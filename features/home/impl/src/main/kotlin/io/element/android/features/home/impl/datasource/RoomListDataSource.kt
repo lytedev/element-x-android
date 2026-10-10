@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -214,6 +215,14 @@ class RoomListDataSource(
             .firstOrNull { it.section.persistenceKey == section.persistenceKey }
             ?.summariesSource
             ?.updateVisibleRange(visibleRangeInSection)
+    }
+
+    /**
+     * The rooms of [section] loaded so far; as the room lists are sorted by recency, rooms past the loaded pages have no recent activity.
+     */
+    suspend fun loadedRoomSummariesOf(section: RoomListSection): List<RoomListRoomSummary> {
+        val sectionRoomList = sectionRoomListsInDisplayOrder.value.firstOrNull { it.section.persistenceKey == section.persistenceKey }
+        return sectionRoomList?.summariesSource?.roomSummariesFlow?.first().orEmpty()
     }
 
     private fun allSummariesSources(): List<DynamicRoomListSummariesSource> {

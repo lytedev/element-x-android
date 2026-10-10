@@ -21,6 +21,7 @@
     <string name="a11y_roomlist_section_options">Options for section %1$s</string>
     <string name="screen_roomlist_section_chats">Chats</string>
     <string name="screen_roomlist_section_new">New section</string>
+    <string name="screen_roomlist_section_mark_all_as_read">Mark all as read</string>
     <string name="screen_roomlist_section_name_placeholder">Section name</string>
     <string name="screen_roomlist_section_rename">Rename section</string>
     <string name="screen_roomlist_section_delete">Delete section</string>

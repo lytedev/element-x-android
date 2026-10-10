@@ -57,6 +57,7 @@ sealed interface RoomListSectionsDialog {
 sealed interface RoomListSectionsEvent {
     data class ToggleSectionCollapsed(val section: RoomListSection) : RoomListSectionsEvent
     data class ShowSectionOptions(val section: RoomListSection) : RoomListSectionsEvent
+    data class MarkSectionAsRead(val section: RoomListSection) : RoomListSectionsEvent
     data class MoveSection(val section: RoomListSection, val direction: SectionMoveDirection) : RoomListSectionsEvent
     data class SetShowPeopleSection(val showPeopleSection: Boolean) : RoomListSectionsEvent
     data class StartCreatingSection(val roomToMoveIntoTheNewSection: RoomId?) : RoomListSectionsEvent

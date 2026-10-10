@@ -96,7 +96,7 @@ internal fun RoomListSectionHeader(
                 )
             }
         }
-        if (sectionContent.section.reorderableKey != null) {
+        if (sectionContent.section != RoomListSection.Invites) {
             IconButton(
                 modifier = Modifier.size(32.dp),
                 onClick = { onShowOptions(sectionContent.section) },

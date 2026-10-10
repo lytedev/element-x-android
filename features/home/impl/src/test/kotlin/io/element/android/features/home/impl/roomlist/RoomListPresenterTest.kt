@@ -912,6 +912,7 @@ class RoomListPresenterTest {
                 roomSectionTagsIndex = roomSectionTagsIndex,
                 roomSectionMover = roomSectionMover,
                 roomListDataSource = roomListDataSource,
+                markRoomAsRead = markRoomAsRead ?: FakeMarkRoomAsRead { Result.success(Unit) },
             ),
             roomSectionMover = roomSectionMover,
             sessionPreferencesStore = sessionPreferencesStore,

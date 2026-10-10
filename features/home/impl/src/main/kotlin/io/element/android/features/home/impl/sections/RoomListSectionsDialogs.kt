@@ -90,6 +90,9 @@ private fun SectionOptionsSheet(
                 content = { Text(roomListSectionTitle(dialog.section), style = ElementTheme.typography.fontBodyLgMedium) },
             )
             val section = dialog.section
+            SheetAction(R.string.screen_roomlist_section_mark_all_as_read, CompoundIcons.MarkAsRead()) {
+                eventSink(RoomListSectionsEvent.MarkSectionAsRead(section))
+            }
             if (section is RoomListSection.Custom) {
                 SheetAction(R.string.screen_roomlist_section_rename, CompoundIcons.Edit()) {
                     eventSink(RoomListSectionsEvent.StartRenamingSection(section))
