@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,6 +44,8 @@ import io.element.android.features.home.impl.roomlist.RoomListContentState
 import io.element.android.features.home.impl.roomlist.RoomListContentStatePreviewParam
 import io.element.android.features.home.impl.roomlist.RoomListEvent
 import io.element.android.features.home.impl.roomlist.SecurityBannerState
+import io.element.android.features.home.impl.sections.RoomListSectionHeader
+import io.element.android.features.home.impl.sections.RoomListSectionsLazyListLayout
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.anUnselectedSpaceFiltersState
 import io.element.android.libraries.designsystem.preview.ElementPreview
@@ -227,8 +230,27 @@ private fun RoomsViewList(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
+    val isBannerShown = when (state.securityBannerState) {
+        SecurityBannerState.SetUpRecovery,
+        SecurityBannerState.RecoveryKeyConfirmation -> true
+        SecurityBannerState.None -> state.fullScreenIntentPermissionsState.shouldDisplayBanner ||
+            state.batteryOptimizationState.shouldDisplayBanner ||
+            state.showNewNotificationSoundBanner
+    }
+    val isSectioned = state.nonEmptySectionsWhenSectionsAreEnabled.isNotEmpty()
+    val sectionsLazyListLayout = RoomListSectionsLazyListLayout(
+        numberOfLazyListItemsBeforeTheSections = if (isBannerShown) 1 else 0,
+        sections = state.nonEmptySectionsWhenSectionsAreEnabled,
+        showSectionHeaders = state.showSectionHeaders,
+    )
     OnVisibleRangeChangeEffect(lazyListState) { visibleRange ->
-        eventSink(RoomListEvent.UpdateVisibleRange(visibleRange))
+        if (isSectioned) {
+            sectionsLazyListLayout.visibleRoomRangesBySection(visibleRange).forEach { (section, visibleRoomRangeInSection) ->
+                eventSink(RoomListEvent.UpdateSectionVisibleRange(section, visibleRoomRangeInSection))
+            }
+        } else {
+            eventSink(RoomListEvent.UpdateVisibleRange(visibleRange))
+        }
     }
     LazyColumn(
         state = lazyListState,
@@ -275,25 +297,61 @@ private fun RoomsViewList(
             }
         }
 
-        // Note: do not use a key for the LazyColumn, or the scroll will not behave as expected if a room
-        // is moved to the top of the list.
-        itemsIndexed(
-            items = state.summaries,
-            contentType = { _, room -> room.contentType() },
-        ) { index, room ->
-            RoomSummaryRow(
-                room = room,
-                hideInviteAvatars = hideInvitesAvatars,
-                isInviteSeen = room.displayType == RoomSummaryDisplayType.INVITE &&
-                    state.seenRoomInvites.contains(room.roomId),
-                showUnreadCount = state.showUnreadCount,
-                showAllActivity = state.showAllActivity,
-                onClick = onRoomClick,
+        if (isSectioned) {
+            state.nonEmptySectionsWhenSectionsAreEnabled.forEach { sectionContent ->
+                if (state.showSectionHeaders) {
+                    item(contentType = "section_header") {
+                        RoomListSectionHeader(
+                            sectionContent = sectionContent,
+                            onToggleCollapse = { section -> eventSink(RoomListEvent.ToggleSectionCollapsed(section)) },
+                        )
+                    }
+                }
+                roomSummaryRows(
+                    summaries = sectionContent.visibleSummaries,
+                    state = state,
+                    hideInvitesAvatars = hideInvitesAvatars,
+                    onRoomClick = onRoomClick,
+                    eventSink = eventSink,
+                )
+            }
+        } else {
+            roomSummaryRows(
+                summaries = state.summaries,
+                state = state,
+                hideInvitesAvatars = hideInvitesAvatars,
+                onRoomClick = onRoomClick,
                 eventSink = eventSink,
             )
-            if (index != state.summaries.lastIndex) {
-                HorizontalDivider()
-            }
+        }
+    }
+}
+
+private fun LazyListScope.roomSummaryRows(
+    summaries: List<RoomListRoomSummary>,
+    state: RoomListContentState.Rooms,
+    hideInvitesAvatars: Boolean,
+    onRoomClick: (RoomListRoomSummary) -> Unit,
+    eventSink: (RoomListEvent) -> Unit,
+) {
+    // Note: do not use a key for the LazyColumn, or the scroll will not behave as expected if a room
+    // is moved to the top of the list.
+    itemsIndexed(
+        items = summaries,
+        contentType = { _, room -> room.contentType() },
+    ) { index, room ->
+        RoomSummaryRow(
+            room = room,
+            hideInviteAvatars = hideInvitesAvatars,
+            isInviteSeen = room.displayType == RoomSummaryDisplayType.INVITE &&
+                state.seenRoomInvites.contains(room.roomId),
+            showUnreadCount = state.showUnreadCount,
+            showAllActivity = state.showAllActivity,
+            onClick = onRoomClick,
+            eventSink = eventSink,
+        )
+        if (index != summaries.lastIndex) {
+            HorizontalDivider()
         }
     }
 }

@@ -11,44 +11,35 @@ package io.element.android.features.home.impl.datasource
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import io.element.android.features.home.impl.model.RoomListRoomSummary
-import io.element.android.libraries.androidutils.diff.DiffCacheUpdater
-import io.element.android.libraries.androidutils.diff.MutableListDiffCache
+import io.element.android.features.home.impl.sections.RoomListSection
 import io.element.android.libraries.androidutils.system.DateTimeObserver
 import io.element.android.libraries.core.coroutine.CoroutineDispatchers
 import io.element.android.libraries.di.SessionScope
 import io.element.android.libraries.di.annotations.SessionCoroutineScope
-import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.notificationsettings.NotificationSettingsService
 import io.element.android.libraries.matrix.api.roomlist.RoomList
 import io.element.android.libraries.matrix.api.roomlist.RoomListFilter
 import io.element.android.libraries.matrix.api.roomlist.RoomListService
-import io.element.android.libraries.matrix.api.roomlist.RoomSummary
-import io.element.android.libraries.matrix.api.roomlist.updateVisibleRange
 import io.element.android.services.analytics.api.AnalyticsService
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.seconds
 
 private const val PAGE_SIZE = 20
-private const val EXTENDED_VISIBILITY_RANGE_SIZE = 40
-private const val SUBSCRIBE_TO_VISIBLE_ROOMS_DEBOUNCE_IN_MILLIS = 300L
 private const val PAGINATION_THRESHOLD = 3 * PAGE_SIZE
 
+/**
+ * Provides the rooms of the room list, either as one flat list or as one list per [RoomListSection].
+ *
+ * The flat list always exists, as it also gives the [loadingState] of the whole room list.
+ * The lists of the sections are only created the first time sections are used, so they cost nothing while sections are disabled.
+ */
 @Inject
 @SingleIn(SessionScope::class)
 class RoomListDataSource(
@@ -66,62 +57,81 @@ class RoomListDataSource(
         observeDateTimeChanges()
     }
 
-    private val roomList = roomListService.createRoomList(
-        pageSize = PAGE_SIZE,
-        source = RoomList.Source.All,
-        coroutineScope = sessionCoroutineScope
+    private val flatRoomListSummariesSource = DynamicRoomListSummariesSource(
+        dynamicRoomList = roomListService.createRoomList(
+            pageSize = PAGE_SIZE,
+            source = RoomList.Source.All,
+            coroutineScope = sessionCoroutineScope,
+        ),
+        paginationThreshold = PAGINATION_THRESHOLD,
+        roomListService = roomListService,
+        roomListRoomSummaryFactory = roomListRoomSummaryFactory,
+        coroutineDispatchers = coroutineDispatchers,
+        analyticsService = analyticsService,
     )
-    private val _roomSummariesFlow = MutableSharedFlow<ImmutableList<RoomListRoomSummary>>(replay = 1)
 
-    private val lock = Mutex()
-    private val diffCache = MutableListDiffCache<RoomListRoomSummary>()
-    private val diffCacheUpdater = DiffCacheUpdater<RoomSummary, RoomListRoomSummary>(diffCache = diffCache, detectMoves = true) { old, new ->
-        old?.roomId == new?.roomId
+    @Volatile
+    private var userSelectedFilter: RoomListFilter = RoomListFilter.all()
+
+    @Volatile
+    private var sectionSummariesSourcesIfCreated: Map<RoomListSection, DynamicRoomListSummariesSource>? = null
+
+    private val sectionSummariesSources: Map<RoomListSection, DynamicRoomListSummariesSource> by lazy {
+        RoomListSection.entries
+            .associateWith(::createSectionSummariesSource)
+            .also { sectionSummariesSourcesIfCreated = it }
     }
 
-    val roomSummariesFlow: Flow<ImmutableList<RoomListRoomSummary>> = _roomSummariesFlow
+    private fun createSectionSummariesSource(section: RoomListSection): DynamicRoomListSummariesSource {
+        return DynamicRoomListSummariesSource(
+            dynamicRoomList = roomListService.createRoomList(
+                pageSize = PAGE_SIZE,
+                source = RoomList.Source.All,
+                coroutineScope = sessionCoroutineScope,
+                initialFilter = section.roomsOfThisSectionAmong(userSelectedFilter),
+            ),
+            paginationThreshold = PAGINATION_THRESHOLD,
+            roomListService = roomListService,
+            roomListRoomSummaryFactory = roomListRoomSummaryFactory,
+            coroutineDispatchers = coroutineDispatchers,
+            analyticsService = analyticsService,
+            sdkFilterNarrowingTheUserSelectedFilter = section::roomsOfThisSectionAmong,
+            isRoomKeptAmongRoomsMatchingTheSdkFilter = section::containsRoom,
+        )
+    }
 
-    val loadingState = roomList.loadingState
+    val roomSummariesFlow: Flow<ImmutableList<RoomListRoomSummary>> = flatRoomListSummariesSource.roomSummariesFlow
+
+    val loadingState = flatRoomListSummariesSource.loadingState
 
     fun launchIn(coroutineScope: CoroutineScope): Job {
-        return roomList
-            .summaries
-            .onEach { roomSummaries ->
-                replaceWith(roomSummaries)
-            }
-            .launchIn(coroutineScope)
+        return flatRoomListSummariesSource.launchIn(coroutineScope)
+    }
+
+    fun sectionRoomSummariesFlow(section: RoomListSection): Flow<ImmutableList<RoomListRoomSummary>> {
+        return sectionSummariesSources.getValue(section).roomSummariesFlow
+    }
+
+    fun launchSectionsIn(coroutineScope: CoroutineScope): List<Job> {
+        return sectionSummariesSources.values.map { sectionSummariesSource -> sectionSummariesSource.launchIn(coroutineScope) }
     }
 
     suspend fun updateFilter(filter: RoomListFilter) {
-        roomList.updateFilter(filter)
+        userSelectedFilter = filter
+        flatRoomListSummariesSource.updateFilter(filter)
+        sectionSummariesSourcesIfCreated?.values?.forEach { sectionSummariesSource -> sectionSummariesSource.updateFilter(filter) }
     }
 
-    suspend fun updateVisibleRange(visibleRange: IntRange) = coroutineScope {
-        launch {
-            roomList.updateVisibleRange(visibleRange, PAGINATION_THRESHOLD)
-        }
-        launch {
-            subscribeToVisibleRoomsIfNeeded(visibleRange)
-        }
+    suspend fun updateVisibleRange(visibleRange: IntRange) {
+        flatRoomListSummariesSource.updateVisibleRange(visibleRange)
     }
 
-    private var currentSubscribeToVisibleRoomsJob: Job? = null
-    private fun CoroutineScope.subscribeToVisibleRoomsIfNeeded(range: IntRange) {
-        currentSubscribeToVisibleRoomsJob?.cancel()
-        currentSubscribeToVisibleRoomsJob = launch {
-            // Debounce the subscription to avoid subscribing to too many rooms
-            delay(SUBSCRIBE_TO_VISIBLE_ROOMS_DEBOUNCE_IN_MILLIS)
+    suspend fun updateSectionVisibleRange(section: RoomListSection, visibleRangeInSection: IntRange) {
+        sectionSummariesSources.getValue(section).updateVisibleRange(visibleRangeInSection)
+    }
 
-            if (range.isEmpty()) return@launch
-            val currentRoomList = roomSummariesFlow.first()
-            // Use extended range to 'prefetch' the next rooms info
-            val midExtendedRangeSize = EXTENDED_VISIBILITY_RANGE_SIZE / 2
-            val extendedRange = range.first until range.last + midExtendedRangeSize
-            val roomIds = extendedRange.mapNotNull { index ->
-                currentRoomList.getOrNull(index)?.roomId
-            }
-            roomListService.subscribeToVisibleRooms(roomIds)
-        }
+    private fun allCreatedSummariesSources(): List<DynamicRoomListSummariesSource> {
+        return listOf(flatRoomListSummariesSource) + sectionSummariesSourcesIfCreated?.values.orEmpty()
     }
 
     @OptIn(FlowPreview::class)
@@ -129,7 +139,7 @@ class RoomListDataSource(
         notificationSettingsService.notificationSettingsChangeFlow
             .debounce(0.5.seconds)
             .onEach {
-                roomList.rebuildSummaries()
+                allCreatedSummariesSources().forEach { summariesSource -> summariesSource.rebuildSummaries() }
             }
             .launchIn(sessionCoroutineScope)
     }
@@ -138,83 +148,12 @@ class RoomListDataSource(
         dateTimeObserver.changes
             .onEach { event ->
                 when (event) {
-                    is DateTimeObserver.Event.TimeZoneChanged -> rebuildAllRoomSummaries()
-                    is DateTimeObserver.Event.DateChanged -> rebuildAllRoomSummaries()
+                    is DateTimeObserver.Event.TimeZoneChanged,
+                    is DateTimeObserver.Event.DateChanged -> allCreatedSummariesSources().forEach { summariesSource ->
+                        summariesSource.rebuildAllRoomSummaries()
+                    }
                 }
             }
             .launchIn(sessionCoroutineScope)
-    }
-
-    private suspend fun replaceWith(roomSummaries: List<RoomSummary>) = withContext(coroutineDispatchers.computation) {
-        lock.withLock {
-            diffCacheUpdater.updateWith(roomSummaries)
-            buildAndEmitAllRooms(roomSummaries)
-        }
-    }
-
-    private suspend fun buildAndEmitAllRooms(roomSummaries: List<RoomSummary>, useCache: Boolean = true) {
-        // Used to detect duplicates in the room list summaries - see comment below
-        data class CacheResult(val index: Int, val fromCache: Boolean)
-
-        val cachingResults = mutableMapOf<RoomId, MutableList<CacheResult>>()
-
-        val roomListRoomSummaries = diffCache.indices().mapNotNull { index ->
-            if (useCache) {
-                diffCache.get(index)?.let { cachedItem ->
-                    // Add the cached item to the caching results
-                    val pairs = cachingResults.getOrDefault(cachedItem.roomId, mutableListOf())
-                    pairs.add(CacheResult(index, fromCache = true))
-                    cachingResults[cachedItem.roomId] = pairs
-                    cachedItem
-                } ?: run {
-                    roomSummaries.getOrNull(index)?.roomId?.let {
-                        // Add the non-cached item to the caching results
-                        val pairs = cachingResults.getOrDefault(it, mutableListOf())
-                        pairs.add(CacheResult(index, fromCache = false))
-                        cachingResults[it] = pairs
-                    }
-                    buildAndCacheItem(roomSummaries, index)
-                }
-            } else {
-                roomSummaries.getOrNull(index)?.roomId?.let {
-                    // Add the non-cached item to the caching results
-                    val pairs = cachingResults.getOrDefault(it, mutableListOf())
-                    pairs.add(CacheResult(index, fromCache = false))
-                    cachingResults[it] = pairs
-                }
-                buildAndCacheItem(roomSummaries, index)
-            }
-        }
-
-        // TODO remove once https://github.com/element-hq/element-x-android/issues/5031 has been confirmed as fixed
-        val duplicates = cachingResults.filter { (_, operations) -> operations.size > 1 }
-        if (duplicates.isNotEmpty()) {
-            analyticsService.trackError(
-                IllegalStateException(
-                    "Found duplicates in room summaries after a local UI update: $duplicates. " +
-                        "This could be a race condition/caching issue of some kind"
-                )
-            )
-
-            // Remove duplicates before emitting the new values
-            _roomSummariesFlow.emit(roomListRoomSummaries.distinctBy { it.roomId }.toImmutableList())
-        } else {
-            _roomSummariesFlow.emit(roomListRoomSummaries.toImmutableList())
-        }
-    }
-
-    private fun buildAndCacheItem(roomSummaries: List<RoomSummary>, index: Int): RoomListRoomSummary? {
-        val roomListSummary = roomSummaries.getOrNull(index)?.let { roomListRoomSummaryFactory.create(it) }
-        diffCache[index] = roomListSummary
-        return roomListSummary
-    }
-
-    private suspend fun rebuildAllRoomSummaries() {
-        lock.withLock {
-            roomList.summaries.replayCache.firstOrNull()?.let { roomSummaries ->
-                diffCacheUpdater.updateWith(roomSummaries)
-                buildAndEmitAllRooms(roomSummaries, useCache = false)
-            }
-        }
     }
 }

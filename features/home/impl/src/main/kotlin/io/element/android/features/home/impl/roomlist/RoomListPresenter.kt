@@ -30,9 +30,12 @@ import io.element.android.features.announcement.api.AnnouncementService
 import io.element.android.features.home.impl.datasource.RoomListDataSource
 import io.element.android.features.home.impl.filters.RoomListFiltersState
 import io.element.android.features.home.impl.filters.into
+import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.search.GlobalSearchState
 import io.element.android.features.home.impl.search.RoomListSearchEvent
 import io.element.android.features.home.impl.search.RoomListSearchState
+import io.element.android.features.home.impl.sections.RoomListSection
+import io.element.android.features.home.impl.sections.RoomListSectionContent
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.into
 import io.element.android.features.home.impl.spacefilters.selectedFilter
@@ -45,6 +48,7 @@ import io.element.android.features.leaveroom.api.LeaveRoomState
 import io.element.android.features.preferences.impl.tasks.MarkRoomAsRead
 import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.architecture.Presenter
+import io.element.android.libraries.architecture.map
 import io.element.android.libraries.featureflag.api.FeatureFlagService
 import io.element.android.libraries.featureflag.api.FeatureFlags
 import io.element.android.libraries.featureflag.api.ShowAllActivityInRoomListFeature
@@ -55,15 +59,20 @@ import io.element.android.libraries.matrix.api.encryption.RecoveryState
 import io.element.android.libraries.matrix.api.roomlist.RoomList
 import io.element.android.libraries.matrix.api.roomlist.RoomListFilter
 import io.element.android.libraries.matrix.ui.safety.rememberHideInvitesAvatar
+import io.element.android.libraries.preferences.api.store.SessionPreferencesStore
 import io.element.android.libraries.push.api.battery.BatteryOptimizationState
 import io.element.android.services.analytics.api.AnalyticsService
 import io.element.android.services.analytics.api.watchers.AnalyticsColdStartWatcher
 import io.element.android.services.analyticsproviders.api.trackers.captureInteraction
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -89,6 +98,7 @@ class RoomListPresenter(
     private val spaceFiltersPresenter: Presenter<SpaceFiltersState>,
     private val globalSearchPresenter: Presenter<GlobalSearchState>,
     private val featureFlagService: FeatureFlagService,
+    private val sessionPreferencesStore: SessionPreferencesStore,
 ) : Presenter<RoomListState> {
     private val encryptionService = client.encryptionService
 
@@ -105,6 +115,18 @@ class RoomListPresenter(
         LaunchedEffect(Unit) {
             roomListDataSource.launchIn(this)
         }
+
+        val isRoomListSectionsEnabled by produceState(initialValue = false) {
+            featureFlagService.isFeatureEnabledFlow(FeatureFlags.RoomListSections).collect { value = it }
+        }
+        LaunchedEffect(isRoomListSectionsEnabled) {
+            if (isRoomListSectionsEnabled) {
+                roomListDataSource.launchSectionsIn(this)
+            }
+        }
+        val collapsedSectionKeys by remember {
+            sessionPreferencesStore.getCollapsedRoomListSectionKeys().map { collapsedSectionKeys -> collapsedSectionKeys.toImmutableSet() }
+        }.collectAsState(persistentSetOf())
 
         var securityBannerDismissed by rememberSaveable { mutableStateOf(false) }
         val showNewNotificationSoundBanner by remember {
@@ -128,6 +150,18 @@ class RoomListPresenter(
                 is RoomListEvent.UpdateVisibleRange -> coroutineScope.launch {
                     roomListDataSource.updateVisibleRange(event.range)
                 }
+                is RoomListEvent.UpdateSectionVisibleRange -> coroutineScope.launch {
+                    roomListDataSource.updateSectionVisibleRange(event.section, event.rangeInSection)
+                }
+                is RoomListEvent.ToggleSectionCollapsed -> coroutineScope.launch {
+                    val sectionKey = event.section.persistenceKey
+                    val collapsedSectionKeysAfterToggle = if (sectionKey in collapsedSectionKeys) {
+                        collapsedSectionKeys - sectionKey
+                    } else {
+                        collapsedSectionKeys + sectionKey
+                    }
+                    sessionPreferencesStore.setCollapsedRoomListSectionKeys(collapsedSectionKeysAfterToggle)
+                }
                 RoomListEvent.DismissRequestVerificationPrompt -> securityBannerDismissed = true
                 RoomListEvent.DismissBanner -> securityBannerDismissed = true
                 RoomListEvent.DismissNewNotificationSoundBanner -> coroutineScope.launch {
@@ -135,7 +169,7 @@ class RoomListPresenter(
                 }
                 RoomListEvent.ToggleSearchResults -> searchState.eventSink(RoomListSearchEvent.ToggleSearchVisibility)
                 is RoomListEvent.ShowContextMenu -> {
-                    coroutineScope.showContextMenu(event, contextMenu)
+                    coroutineScope.showContextMenu(event, contextMenu, showLowPriorityToggle = isRoomListSectionsEnabled)
                 }
                 is RoomListEvent.HideContextMenu -> {
                     contextMenu.value = RoomListState.ContextMenu.Hidden
@@ -144,6 +178,7 @@ class RoomListPresenter(
                     leaveRoomState.eventSink(LeaveRoomEvent.LeaveRoom(event.roomId, needsConfirmation = event.needsConfirmation))
                 }
                 is RoomListEvent.SetRoomIsFavorite -> coroutineScope.setRoomIsFavorite(event.roomId, event.isFavorite)
+                is RoomListEvent.SetRoomIsLowPriority -> coroutineScope.setRoomIsLowPriority(event.roomId, event.isLowPriority)
                 is RoomListEvent.MarkAsRead -> coroutineScope.markAsRead(event.roomId)
                 is RoomListEvent.MarkAsUnread -> coroutineScope.markAsUnread(event.roomId)
                 is RoomListEvent.AcceptInvite -> {
@@ -178,6 +213,8 @@ class RoomListPresenter(
             showNewNotificationSoundBanner,
             showUnreadCount,
             showAllActivity,
+            isRoomListSectionsEnabled,
+            collapsedSectionKeys,
         )
 
         return RoomListState(
@@ -237,9 +274,39 @@ class RoomListPresenter(
         showNewNotificationSoundBanner: Boolean,
         showUnreadCount: Boolean,
         showAllActivity: Boolean,
+        isRoomListSectionsEnabled: Boolean,
+        collapsedSectionKeys: ImmutableSet<String>,
     ): RoomListContentState {
-        val roomSummaries by produceState(initialValue = AsyncData.Loading()) {
+        val flatRoomSummaries by produceState(initialValue = AsyncData.Loading()) {
             roomListDataSource.roomSummariesFlow.collect { value = AsyncData.Success(it) }
+        }
+        val roomSummariesBySection by produceState<AsyncData<Map<RoomListSection, ImmutableList<RoomListRoomSummary>>>>(
+            initialValue = AsyncData.Loading(),
+            isRoomListSectionsEnabled,
+        ) {
+            value = AsyncData.Loading()
+            if (!isRoomListSectionsEnabled) return@produceState
+            val roomSummariesBySectionFlows = RoomListSection.entries.map { section ->
+                roomListDataSource.sectionRoomSummariesFlow(section).map { sectionRoomSummaries -> section to sectionRoomSummaries }
+            }
+            combine(roomSummariesBySectionFlows) { sectionAndRoomSummariesPairs -> sectionAndRoomSummariesPairs.toMap() }
+                .collect { value = AsyncData.Success(it) }
+        }
+        val roomSummaries = if (isRoomListSectionsEnabled) {
+            roomSummariesBySection.map { summariesBySection ->
+                RoomListSection.entries.flatMap { section -> summariesBySection[section].orEmpty() }.toImmutableList()
+            }
+        } else {
+            flatRoomSummaries
+        }
+        val nonEmptySectionsWhenSectionsAreEnabled = RoomListSection.entries.mapNotNull { section ->
+            val sectionRoomSummaries = roomSummariesBySection.dataOrNull()?.get(section)
+            if (!isRoomListSectionsEnabled || sectionRoomSummaries.isNullOrEmpty()) return@mapNotNull null
+            RoomListSectionContent(
+                section = section,
+                summaries = sectionRoomSummaries,
+                isCollapsed = section.persistenceKey in collapsedSectionKeys,
+            )
         }
         val loadingState by roomListDataSource.loadingState.collectAsState()
         val showEmpty by remember {
@@ -247,11 +314,7 @@ class RoomListPresenter(
                 (loadingState as? RoomList.LoadingState.Loaded)?.numberOfRooms == 0
             }
         }
-        val showSkeleton by remember {
-            derivedStateOf {
-                loadingState == RoomList.LoadingState.NotLoaded || roomSummaries is AsyncData.Loading
-            }
-        }
+        val showSkeleton = loadingState == RoomList.LoadingState.NotLoaded || roomSummaries is AsyncData.Loading
         val seenRoomInvites by remember { seenInvitesStore.seenRoomIds() }.collectAsState(emptySet())
         val securityBannerState by rememberSecurityBannerState(securityBannerDismissed)
         return when {
@@ -271,19 +334,25 @@ class RoomListPresenter(
                     summaries = roomSummaries.dataOrNull().orEmpty().toImmutableList(),
                     showAllActivity = showAllActivity,
                     seenRoomInvites = seenRoomInvites.toImmutableSet(),
+                    nonEmptySectionsWhenSectionsAreEnabled = nonEmptySectionsWhenSectionsAreEnabled.toImmutableList(),
                 )
             }
         }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun CoroutineScope.showContextMenu(event: RoomListEvent.ShowContextMenu, contextMenuState: MutableState<RoomListState.ContextMenu>) = launch {
+    private fun CoroutineScope.showContextMenu(
+        event: RoomListEvent.ShowContextMenu,
+        contextMenuState: MutableState<RoomListState.ContextMenu>,
+        showLowPriorityToggle: Boolean,
+    ) = launch {
         val initialState = RoomListState.ContextMenu.Shown(
             roomId = event.roomSummary.roomId,
             roomName = event.roomSummary.name,
             isDm = event.roomSummary.isDm,
             isFavorite = event.roomSummary.isFavorite,
             hasNewContent = event.roomSummary.hasNewContent,
+            showLowPriorityToggleBecauseSectionsAreEnabled = showLowPriorityToggle,
         )
         contextMenuState.value = initialState
 
@@ -292,13 +361,15 @@ class RoomListPresenter(
             val isShowingContextMenuFlow = snapshotFlow { contextMenuState.value is RoomListState.ContextMenu.Shown }
                 .distinctUntilChanged()
 
-            val isFavoriteFlow = room.roomInfoFlow
-                .map { it.isFavorite }
+            data class RoomTags(val isFavorite: Boolean, val isLowPriority: Boolean)
+
+            val roomTagsFlow = room.roomInfoFlow
+                .map { roomInfo -> RoomTags(isFavorite = roomInfo.isFavorite, isLowPriority = roomInfo.isLowPriority) }
                 .distinctUntilChanged()
 
-            isFavoriteFlow
-                .onEach { isFavorite ->
-                    contextMenuState.value = initialState.copy(isFavorite = isFavorite)
+            roomTagsFlow
+                .onEach { roomTags ->
+                    contextMenuState.value = initialState.copy(isFavorite = roomTags.isFavorite, isLowPriority = roomTags.isLowPriority)
                 }
                 .flatMapLatest { isShowingContextMenuFlow }
                 .takeWhile { isShowingContextMenu -> isShowingContextMenu }
@@ -312,6 +383,12 @@ class RoomListPresenter(
                 .onSuccess {
                     analyticsService.captureInteraction(name = Interaction.Name.MobileRoomListRoomContextMenuFavouriteToggle)
                 }
+        }
+    }
+
+    private fun CoroutineScope.setRoomIsLowPriority(roomId: RoomId, isLowPriority: Boolean) = launch {
+        client.getRoom(roomId)?.use { room ->
+            room.setIsLowPriority(isLowPriority)
         }
     }
 

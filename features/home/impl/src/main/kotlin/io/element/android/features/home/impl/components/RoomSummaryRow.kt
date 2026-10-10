@@ -426,7 +426,7 @@ private fun InviteNameAndIndicatorRow(
 }
 
 @Composable
-private fun OnGoingCallIcon(
+internal fun OnGoingCallIcon(
     color: Color,
     isAudio: Boolean
 ) {
@@ -449,7 +449,7 @@ private fun NotificationOffIndicatorAtom() {
 }
 
 @Composable
-private fun MentionIndicatorAtom() {
+internal fun MentionIndicatorAtom() {
     Icon(
         modifier = Modifier.size(16.dp),
         contentDescription = stringResource(CommonStrings.a11y_notifications_new_mentions),

@@ -9,6 +9,7 @@
 package io.element.android.features.home.impl.roomlist
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import im.vector.app.features.analytics.plan.Interaction
 import io.element.android.features.announcement.api.Announcement
 import io.element.android.features.announcement.api.AnnouncementService
@@ -18,11 +19,13 @@ import io.element.android.features.home.impl.datasource.RoomListDataSource
 import io.element.android.features.home.impl.datasource.aRoomListRoomSummaryFactory
 import io.element.android.features.home.impl.filters.RoomListFiltersState
 import io.element.android.features.home.impl.filters.aRoomListFiltersState
+import io.element.android.features.home.impl.model.aRoomListRoomSummary
 import io.element.android.features.home.impl.model.createRoomListRoomSummary
 import io.element.android.features.home.impl.search.RoomListSearchEvent
 import io.element.android.features.home.impl.search.RoomListSearchState
 import io.element.android.features.home.impl.search.aGlobalSearchState
 import io.element.android.features.home.impl.search.aRoomListSearchState
+import io.element.android.features.home.impl.sections.RoomListSection
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.aDisabledSpaceFiltersState
 import io.element.android.features.invite.api.SeenInvitesStore
@@ -50,6 +53,7 @@ import io.element.android.libraries.matrix.api.encryption.RecoveryState
 import io.element.android.libraries.matrix.api.room.CurrentUserMembership
 import io.element.android.libraries.matrix.api.room.RoomNotificationMode
 import io.element.android.libraries.matrix.api.roomlist.RoomList
+import io.element.android.libraries.matrix.api.roomlist.RoomListFilter
 import io.element.android.libraries.matrix.api.sync.SyncState
 import io.element.android.libraries.matrix.api.timeline.ReceiptType
 import io.element.android.libraries.matrix.test.A_ROOM_ID
@@ -78,6 +82,7 @@ import io.element.android.services.analytics.test.watchers.FakeAnalyticsColdStar
 import io.element.android.tests.testutils.EventsRecorder
 import io.element.android.tests.testutils.WarmUpRule
 import io.element.android.tests.testutils.consumeItemsUntilPredicate
+import io.element.android.tests.testutils.consumeItemsUntilTimeout
 import io.element.android.tests.testutils.lambda.assert
 import io.element.android.tests.testutils.lambda.lambdaRecorder
 import io.element.android.tests.testutils.lambda.value
@@ -398,6 +403,45 @@ class RoomListPresenterTest {
     }
 
     @Test
+    fun `toggling low priority from the context menu sets and then clears the low priority tag of the room`() = runTest {
+        val setIsLowPriorityResult = lambdaRecorder { _: Boolean -> Result.success(Unit) }
+        val client = FakeMatrixClient().apply {
+            givenGetRoomResult(A_ROOM_ID, FakeBaseRoom(setIsLowPriorityResult = setIsLowPriorityResult))
+        }
+        val presenter = createRoomListPresenter(client = client, featureFlagService = aSectionsEnabledFeatureFlagService())
+        presenter.test {
+            val initialState = awaitItem()
+            initialState.eventSink(RoomListEvent.SetRoomIsLowPriority(A_ROOM_ID, true))
+            initialState.eventSink(RoomListEvent.SetRoomIsLowPriority(A_ROOM_ID, false))
+            setIsLowPriorityResult.assertions().isCalledExactly(2)
+                .withSequence(
+                    listOf(value(true)),
+                    listOf(value(false)),
+                )
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `the context menu only offers the low priority toggle while sections are enabled, as only the Low priority section uses it`() = runTest {
+        val roomSummary = aRoomListRoomSummary()
+        listOf(true, false).forEach { isRoomListSectionsEnabled ->
+            val presenter = createRoomListPresenter(
+                featureFlagService = FakeFeatureFlagService(initialState = mapOf(FeatureFlags.RoomListSections.key to isRoomListSectionsEnabled)),
+            )
+            presenter.test {
+                consumeItemsUntilTimeout().last().eventSink(RoomListEvent.ShowContextMenu(roomSummary))
+                val stateWithContextMenu = consumeItemsUntilPredicate { state -> state.contextMenu is RoomListState.ContextMenu.Shown }.last()
+                val shownContextMenu = stateWithContextMenu.contextMenu as RoomListState.ContextMenu.Shown
+                assertWithMessage("with sections enabled = $isRoomListSectionsEnabled, the low priority toggle visibility must match")
+                    .that(shownContextMenu.showLowPriorityToggleBecauseSectionsAreEnabled)
+                    .isEqualTo(isRoomListSectionsEnabled)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+    }
+
+    @Test
     fun `present - when room service returns no room, then contentState is Empty`() = runTest {
         val roomList = FakeDynamicRoomList(
             loadingState = MutableStateFlow(RoomList.LoadingState.Loaded(0))
@@ -708,6 +752,110 @@ class RoomListPresenterTest {
         }
     }
 
+    /**
+     * Gives the presenter one room list per section, recognised by the filter each section list is created with.
+     */
+    private class RoomListsOfEachSection {
+        val flatRoomList = FakeDynamicRoomList(loadingState = MutableStateFlow(RoomList.LoadingState.Loaded(numberOfRooms = 3)))
+        val roomListBySection: Map<RoomListSection, FakeDynamicRoomList> = RoomListSection.entries.associateWith { FakeDynamicRoomList() }
+        val roomListService = FakeRoomListService(
+            createRoomListWithInitialFilterLambda = { _, initialFilter ->
+                RoomListSection.entries
+                    .firstOrNull { section -> section.roomsOfThisSectionAmong(RoomListFilter.all()) == initialFilter }
+                    ?.let(roomListBySection::getValue)
+                    ?: flatRoomList
+            },
+        )
+    }
+
+    private fun aSectionsEnabledFeatureFlagService() = FakeFeatureFlagService(initialState = mapOf(FeatureFlags.RoomListSections.key to true))
+
+    @Test
+    fun `with sections enabled, only the sections holding rooms are shown, in the section order`() = runTest {
+        val roomListsOfEachSection = RoomListsOfEachSection()
+        val presenter = createRoomListPresenter(
+            client = FakeMatrixClient(roomListService = roomListsOfEachSection.roomListService),
+            featureFlagService = aSectionsEnabledFeatureFlagService(),
+        )
+        presenter.test {
+            roomListsOfEachSection.roomListBySection.getValue(RoomListSection.Rooms).summaries.emit(listOf(aRoomSummary(roomId = A_ROOM_ID)))
+            roomListsOfEachSection.roomListBySection.getValue(RoomListSection.Favourites).summaries.emit(
+                listOf(aRoomSummary(roomId = A_ROOM_ID_2, isFavorite = true))
+            )
+
+            val stateWithBothSections = consumeItemsUntilPredicate { state ->
+                (state.contentState as? RoomListContentState.Rooms)?.nonEmptySectionsWhenSectionsAreEnabled?.size == 2
+            }.last().contentAsRooms()
+
+            assertWithMessage(
+                "Favourites must come before Rooms, and the sections without any room (Invites, People, Low priority) must be hidden",
+            ).that(stateWithBothSections.nonEmptySectionsWhenSectionsAreEnabled.map { it.section })
+                .containsExactly(RoomListSection.Favourites, RoomListSection.Rooms)
+                .inOrder()
+            assertWithMessage("with more than one section holding rooms, each section must be introduced by its header")
+                .that(stateWithBothSections.showSectionHeaders)
+                .isTrue()
+            assertWithMessage("the rooms of all sections, in section order, must be listed so that the empty state is decided on all of them")
+                .that(stateWithBothSections.summaries.map { it.roomId })
+                .containsExactly(A_ROOM_ID_2, A_ROOM_ID)
+                .inOrder()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `with sections enabled, an invite matched by the filters of the People section is only listed under Invites`() = runTest {
+        val roomListsOfEachSection = RoomListsOfEachSection()
+        val presenter = createRoomListPresenter(
+            client = FakeMatrixClient(roomListService = roomListsOfEachSection.roomListService),
+            featureFlagService = aSectionsEnabledFeatureFlagService(),
+        )
+        presenter.test {
+            val invitedDirectMessage = aRoomSummary(roomId = A_ROOM_ID_3, isDirect = true, currentUserMembership = CurrentUserMembership.INVITED)
+            roomListsOfEachSection.roomListBySection.getValue(RoomListSection.People).summaries.emit(listOf(invitedDirectMessage))
+            roomListsOfEachSection.roomListBySection.getValue(RoomListSection.Invites).summaries.emit(listOf(invitedDirectMessage))
+
+            val stateWithTheInvite = consumeItemsUntilPredicate { state ->
+                (state.contentState as? RoomListContentState.Rooms)?.nonEmptySectionsWhenSectionsAreEnabled?.isNotEmpty() == true
+            }.last().contentAsRooms()
+
+            assertWithMessage("the invited direct message must not be repeated in People, so Invites must be the only section shown")
+                .that(stateWithTheInvite.nonEmptySectionsWhenSectionsAreEnabled.map { it.section })
+                .containsExactly(RoomListSection.Invites)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `collapsing a section hides its rooms and is remembered for the session`() = runTest {
+        val roomListsOfEachSection = RoomListsOfEachSection()
+        val sessionPreferencesStore = InMemorySessionPreferencesStore()
+        val presenter = createRoomListPresenter(
+            client = FakeMatrixClient(roomListService = roomListsOfEachSection.roomListService),
+            featureFlagService = aSectionsEnabledFeatureFlagService(),
+            sessionPreferencesStore = sessionPreferencesStore,
+        )
+        presenter.test {
+            roomListsOfEachSection.roomListBySection.getValue(RoomListSection.Favourites).summaries.emit(
+                listOf(aRoomSummary(roomId = A_ROOM_ID, isFavorite = true))
+            )
+            val expandedState = consumeItemsUntilPredicate { state ->
+                (state.contentState as? RoomListContentState.Rooms)?.nonEmptySectionsWhenSectionsAreEnabled?.isNotEmpty() == true
+            }.last()
+
+            expandedState.eventSink(RoomListEvent.ToggleSectionCollapsed(RoomListSection.Favourites))
+
+            val collapsedFavourites = consumeItemsUntilPredicate { state ->
+                (state.contentState as? RoomListContentState.Rooms)?.nonEmptySectionsWhenSectionsAreEnabled?.firstOrNull()?.isCollapsed == true
+            }.last().contentAsRooms().nonEmptySectionsWhenSectionsAreEnabled.single()
+            assertWithMessage("a collapsed section must hide its rooms").that(collapsedFavourites.visibleSummaries).isEmpty()
+            assertWithMessage("the collapsed state must be stored, so that the section is still collapsed when the room list is opened again")
+                .that(sessionPreferencesStore.getCollapsedRoomListSectionKeys().first())
+                .containsExactly(RoomListSection.Favourites.persistenceKey)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     private fun TestScope.createRoomListPresenter(
         client: MatrixClient = FakeMatrixClient(),
         leaveRoomState: LeaveRoomState = aLeaveRoomState(),
@@ -756,5 +904,6 @@ class RoomListPresenterTest {
         announcementService = announcementService,
         coldStartWatcher = FakeAnalyticsColdStartWatcher(),
         featureFlagService = featureFlagService,
+        sessionPreferencesStore = sessionPreferencesStore,
     )
 }

@@ -9,10 +9,13 @@
 package io.element.android.features.home.impl.roomlist
 
 import io.element.android.features.home.impl.model.RoomListRoomSummary
+import io.element.android.features.home.impl.sections.RoomListSection
 import io.element.android.libraries.matrix.api.core.RoomId
 
 sealed interface RoomListEvent {
     data class UpdateVisibleRange(val range: IntRange) : RoomListEvent
+    data class UpdateSectionVisibleRange(val section: RoomListSection, val rangeInSection: IntRange) : RoomListEvent
+    data class ToggleSectionCollapsed(val section: RoomListSection) : RoomListEvent
     data object DismissRequestVerificationPrompt : RoomListEvent
     data object DismissBanner : RoomListEvent
     data object DismissNewNotificationSoundBanner : RoomListEvent
@@ -30,4 +33,5 @@ sealed interface RoomListEvent {
     data class MarkAsRead(val roomId: RoomId) : ContextMenuEvent
     data class MarkAsUnread(val roomId: RoomId) : ContextMenuEvent
     data class SetRoomIsFavorite(val roomId: RoomId, val isFavorite: Boolean) : ContextMenuEvent
+    data class SetRoomIsLowPriority(val roomId: RoomId, val isLowPriority: Boolean) : ContextMenuEvent
 }

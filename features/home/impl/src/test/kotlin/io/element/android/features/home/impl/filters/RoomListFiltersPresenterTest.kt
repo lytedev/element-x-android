@@ -9,8 +9,13 @@
 package io.element.android.features.home.impl.filters
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import io.element.android.features.home.impl.filters.selection.DefaultFilterSelectionStrategy
 import io.element.android.features.home.impl.filters.selection.FilterSelectionState
+import io.element.android.features.home.impl.filters.selection.FilterSelectionStrategy
+import io.element.android.libraries.featureflag.api.FeatureFlagService
+import io.element.android.libraries.featureflag.api.FeatureFlags
+import io.element.android.libraries.featureflag.test.FakeFeatureFlagService
 import io.element.android.tests.testutils.awaitLastSequentialItem
 import io.element.android.tests.testutils.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -133,13 +138,44 @@ class RoomListFiltersPresenterTest {
     }
 }
 
+class RoomListFiltersPresenterWithSectionsTest {
+    @Test
+    fun `while sections are enabled the favourites and invites filters are deselected and hidden, as their sections replace them`() = runTest {
+        val filterSelectionStrategy = DefaultFilterSelectionStrategy().apply {
+            select(RoomListFilter.Favourites)
+        }
+        val presenter = createRoomListFiltersPresenter(
+            featureFlagService = FakeFeatureFlagService(initialState = mapOf(FeatureFlags.RoomListSections.key to true)),
+            filterSelectionStrategy = filterSelectionStrategy,
+        )
+        presenter.test {
+            val stateOnceSectionsAreEnabled = awaitLastSequentialItem()
+            assertWithMessage(
+                "Favourites was selected before sections were enabled, but the Favourites section now shows those rooms, " +
+                    "so the filter must be deselected rather than hide every other section",
+            ).that(stateOnceSectionsAreEnabled.selectedFilters()).isEmpty()
+            assertWithMessage(
+                "only the filters that no section replaces may be offered while sections are enabled",
+            ).that(stateOnceSectionsAreEnabled.filterSelectionStates.map { it.filter }).containsExactly(
+                RoomListFilter.Unread,
+                RoomListFilter.People,
+                RoomListFilter.Rooms,
+            )
+        }
+    }
+}
+
 private fun filterSelectionState(filter: RoomListFilter, selected: Boolean) = FilterSelectionState(
     filter = filter,
     isSelected = selected,
 )
 
-private fun TestScope.createRoomListFiltersPresenter(): RoomListFiltersPresenter {
+private fun TestScope.createRoomListFiltersPresenter(
+    featureFlagService: FeatureFlagService = FakeFeatureFlagService(),
+    filterSelectionStrategy: FilterSelectionStrategy = DefaultFilterSelectionStrategy(),
+): RoomListFiltersPresenter {
     return RoomListFiltersPresenter(
-        filterSelectionStrategy = DefaultFilterSelectionStrategy(),
+        filterSelectionStrategy = filterSelectionStrategy,
+        featureFlagService = featureFlagService,
     )
 }

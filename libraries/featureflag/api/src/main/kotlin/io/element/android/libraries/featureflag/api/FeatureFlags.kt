@@ -177,6 +177,14 @@ enum class FeatureFlags(
         defaultValue = { false },
         isFinished = false,
     ),
+    RoomListSections(
+        key = "feature.room_list_sections",
+        title = "Room list sections",
+        description = "Group the room list into collapsible sections: Invites, Favourites, People, Rooms and Low priority.",
+        defaultValue = { false },
+        isFinished = false,
+        isInLabs = true,
+    ),
 }
 
 /**

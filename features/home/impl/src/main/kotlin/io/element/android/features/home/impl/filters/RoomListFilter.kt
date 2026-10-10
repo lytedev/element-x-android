@@ -9,6 +9,7 @@
 package io.element.android.features.home.impl.filters
 
 import io.element.android.features.home.impl.R
+import io.element.android.features.home.impl.sections.RoomListSection
 import io.element.android.libraries.matrix.api.roomlist.RoomListFilter as MatrixRoomListFilter
 
 /**
@@ -29,6 +30,16 @@ enum class RoomListFilter(val stringResource: Int) {
             Unread -> setOf(Invites)
             Favourites -> setOf(Invites)
             Invites -> setOf(Rooms, People, Unread, Favourites)
+        }
+
+    /**
+     * Like on Element Web, the filters that would only repeat what a room list section already shows are hidden while sections are enabled.
+     */
+    val sectionReplacingThisFilter: RoomListSection?
+        get() = when (this) {
+            Favourites -> RoomListSection.Favourites
+            Invites -> RoomListSection.Invites
+            Unread, People, Rooms -> null
         }
 }
 

@@ -9,16 +9,21 @@
 package io.element.android.features.home.impl.filters
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import dev.zacsweers.metro.Inject
 import io.element.android.features.home.impl.filters.selection.FilterSelectionStrategy
 import io.element.android.libraries.architecture.Presenter
+import io.element.android.libraries.featureflag.api.FeatureFlagService
+import io.element.android.libraries.featureflag.api.FeatureFlags
 import kotlinx.collections.immutable.toImmutableList
 
 @Inject
 class RoomListFiltersPresenter(
     private val filterSelectionStrategy: FilterSelectionStrategy,
+    private val featureFlagService: FeatureFlagService,
 ) : Presenter<RoomListFiltersState> {
     @Composable
     override fun present(): RoomListFiltersState {
@@ -33,9 +38,24 @@ class RoomListFiltersPresenter(
             }
         }
 
+        val isRoomListSectionsEnabled by produceState(initialValue = false) {
+            featureFlagService.isFeatureEnabledFlow(FeatureFlags.RoomListSections).collect { value = it }
+        }
+        val filtersReplacedBySections = RoomListFilter.entries.filter { filter -> filter.sectionReplacingThisFilter != null }
+        LaunchedEffect(isRoomListSectionsEnabled) {
+            if (isRoomListSectionsEnabled) {
+                filtersReplacedBySections.forEach(filterSelectionStrategy::deselect)
+            }
+        }
+
         val filters by filterSelectionStrategy.filterSelectionStates.collectAsState()
+        val shownFilters = if (isRoomListSectionsEnabled) {
+            filters.filterNot { filterSelectionState -> filterSelectionState.filter in filtersReplacedBySections }
+        } else {
+            filters
+        }
         return RoomListFiltersState(
-            filterSelectionStates = filters.toImmutableList(),
+            filterSelectionStates = shownFilters.toImmutableList(),
             eventSink = ::handleEvent,
         )
     }

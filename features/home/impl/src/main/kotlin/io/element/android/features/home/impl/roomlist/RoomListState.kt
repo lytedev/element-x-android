@@ -13,6 +13,8 @@ import io.element.android.features.home.impl.filters.RoomListFiltersState
 import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.search.GlobalSearchState
 import io.element.android.features.home.impl.search.RoomListSearchState
+import io.element.android.features.home.impl.sections.RoomListSection
+import io.element.android.features.home.impl.sections.RoomListSectionContent
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.invite.api.acceptdecline.AcceptDeclineInviteState
 import io.element.android.features.leaveroom.api.LeaveRoomState
@@ -21,6 +23,7 @@ import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.push.api.battery.BatteryOptimizationState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
 
 data class RoomListState(
     val contextMenu: ContextMenu,
@@ -46,6 +49,8 @@ data class RoomListState(
             val isDm: Boolean,
             val isFavorite: Boolean,
             val hasNewContent: Boolean,
+            val isLowPriority: Boolean = false,
+            val showLowPriorityToggleBecauseSectionsAreEnabled: Boolean = false,
         ) : ContextMenu
     }
 
@@ -77,5 +82,11 @@ sealed interface RoomListContentState {
         val summaries: ImmutableList<RoomListRoomSummary>,
         val seenRoomInvites: ImmutableSet<RoomId>,
         val showAllActivity: Boolean,
-    ) : RoomListContentState
+        val nonEmptySectionsWhenSectionsAreEnabled: ImmutableList<RoomListSectionContent> = persistentListOf(),
+    ) : RoomListContentState {
+        val showSectionHeaders: Boolean = nonEmptySectionsWhenSectionsAreEnabled.map { it.section } !in listOf(
+            emptyList(),
+            listOf(RoomListSection.sectionThatIsDrawnWithoutHeaderWhenItIsTheOnlyOneWithRooms),
+        )
+    }
 }
