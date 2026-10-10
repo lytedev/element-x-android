@@ -375,3 +375,17 @@ configurations.all {
         }
     }
 }
+
+val usesLocalRustSdk = file("${rootDir.path}/libraries/rustsdk/matrix-rust-sdk.aar").exists()
+if (usesLocalRustSdk) {
+    // :libraries:matrix:impl only substitutes its own configurations, but the app resolves element-call-matrix
+    // again, which would bring the published SDK next to the local AAR and fail the manifest merge on the
+    // shared org.matrix.rustcomponents.sdk namespace.
+    configurations.matching { it.name.contains("debug", ignoreCase = true) }.configureEach {
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("org.matrix.rustcomponents:sdk-android"))
+                .using(project(":libraries:rustsdk"))
+                .because("the local Rust SDK AAR replaces the published one on debug builds")
+        }
+    }
+}
